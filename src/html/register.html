@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Create Admin Account</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      background: #f0f0f0;
+    }
+    .form-container {
+      background: #fff;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      width: 300px;
+    }
+    .form-container h2 {
+      text-align: center;
+    }
+    input {
+      width: 100%;
+      padding: 10px;
+      margin: 8px 0;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+    }
+    button {
+      width: 100%;
+      padding: 10px;
+      background: #0984e3;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    button:hover {
+      background: #006bb3;
+    }
+    .message {
+      text-align: center;
+      margin-top: 10px;
+      font-size: 0.9em;
+    }
+  </style>
+</head>
+<body>
+  <div class="form-container">
+    <h2>Create Admin</h2>
+    <form id="registerForm">
+      <input type="text" id="username" placeholder="Enter Username" required>
+      <input type="email" id="email" placeholder="Enter Email (optional)">
+      <input type="password" id="password" placeholder="Enter Password" required>
+      <button type="submit">Register</button>
+      <p class="message" id="responseMessage"></p>
+    </form>
+  </div>
+
+  <script>
+    const form = document.getElementById("registerForm");
+    const responseMessage = document.getElementById("responseMessage");
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+
+      const username = document.getElementById("username").value;
+      const email = document.getElementById("email").value;
+      const password = document.getElementById("password").value;
+
+      try {
+        const res = await fetch("http://localhost:5000/create-admin", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username, email, password })
+        });
+
+        const data = await res.json();
+        responseMessage.textContent = data.message;
+        responseMessage.style.color = data.success ? "green" : "red";
+      } catch (err) {
+        responseMessage.textContent = "Server error. Please try again.";
+        responseMessage.style.color = "red";
+      }
+    });
+  </script>
+</body>
+</html>

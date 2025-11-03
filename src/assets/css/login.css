@@ -1,0 +1,226 @@
+/* Baloo 2 Regular */
+@font-face {
+    font-family: 'Baloo 2';
+    src: url('../css/fonts/Baloo2-Regular.ttf') format('truetype');
+    font-weight: 400;
+    font-style: normal;
+}
+
+/* Baloo 2 Medium */
+@font-face {
+    font-family: 'Baloo 2';
+    src: url('../css/fonts/Baloo2-Medium.ttf') format('truetype');
+    font-weight: 500;
+    font-style: normal;
+}
+
+/* Baloo 2 Semibold */
+@font-face {
+    font-family: 'Baloo 2';
+    src: url('../css/fonts/Baloo2-SemiBold.ttf') format('truetype');
+    font-weight: 600;
+    font-style: normal;
+}
+
+/* Baloo 2 Bold */
+@font-face {
+    font-family: 'Baloo 2';
+    src: url('../css/fonts/Baloo2-Bold.ttf') format('truetype');
+    font-weight: 700;
+    font-style: normal;
+}
+
+/* Baloo 2 ExtraBold */
+@font-face {
+    font-family: 'Baloo 2';
+    src: url('../css/fonts/Baloo2-ExtraBold.ttf') format('truetype');
+    font-weight: 800;
+    font-style: normal;
+}
+
+/* Fonts Above. */
+
+body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #333, #312b2b);
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      margin: 0;
+    }
+    .container-handler{
+      display: flex;
+      justify-content: center;
+      width: 1000px;
+      padding: 5px;
+      
+    }
+    .container {
+      display: block;
+      flex-wrap: wrap;
+      background: #fff;
+      padding: 2rem;
+      border-top-right-radius: 12px;
+      border-bottom-right-radius: 12px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+      max-width: 300px;
+      width: 70%;
+      text-align: center;
+    }
+     .container-img{
+      width: 325px;
+      height: auto;
+      background: #fff;
+      border-top-left-radius: 12px;
+      border-bottom-left-radius: 12px;
+      padding: 20px;
+    }
+    
+    /* Login Header */
+    .login-header{
+      width: 100%;
+      display: flex;
+      justify-content: center;
+      align-content: center;
+      align-items: center;
+      margin-bottom: 50px;
+    }
+    .login-header img{
+      animation: fadeIn 1s ease-in-out;
+    }
+    .login-header h1.title{
+      width: auto;
+      margin: 0 20px 0 0;
+      font-family: 'Baloo 2';
+      font-weight: 700; /* Medium */
+      font-size: 30px;
+      color:#333;
+      animation: fadeIn 1s ease-in-out;
+    }
+    .login-header h1.title span{
+      color: #E15711;
+      font-family: 'Baloo 2';
+      font-weight: 700; /* Medium */
+      animation: fadeIn 1s ease-in-out;
+    }
+    .login-body{
+      display: block;
+      width: 100%;
+    }
+    /* Forgot Password link */
+    .forget-p {
+      font-size: 0.9rem;
+      color: #0984e3;
+      text-align: right;
+      cursor: pointer;
+      display: block;
+      margin-bottom: 1rem;
+      transition: color 0.3s;
+      user-select: none; /* optional, prevent text highlight */
+    }
+
+    .forget-p:focus,
+    .forget-p:active {
+      outline: none;
+      background: none;   /* removes blue highlight */
+    }
+    /* Spinner inside button */
+    .loader {
+      width: 16px;
+      height: 16px;
+      border: 3px solid #fff;
+      border-top: 3px solid #0984e3;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+
+    .hidden {
+      display: none;
+    }
+    .error {
+      color: red;
+      margin-top: 0.5rem;
+      font-size: 0.9rem;
+      display: none; /* hidden by default */
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: scale(0.9); }
+      to { opacity: 1; transform: scale(1); }
+    }
+    form {
+      display: flex;
+      flex-direction: column;
+      height: 200px;
+      gap: 1rem;
+    }
+    input {
+      padding: 0.65rem;
+      border: 2px solid #ddd;
+      border-radius: 8px;
+      font-size: 1rem;
+      transition: border-color 0.3s;
+    }
+    input:focus {
+      border-color: #0984e3;
+      outline: none;
+    }
+    button#loginBtn.login-btn {
+      background: #E15711;
+      color: white;
+      padding: 0.75rem;
+      border: none;
+      border-radius: 8px;
+      font-size: 1rem;
+      cursor: pointer;
+      transition: background 0.3s;
+    }
+
+/* Spinner next to Login */
+.loader {
+    width: 16px;
+    height: 16px;
+    border: 3px solid #fff;
+    border-top: 3px solid #0984e3;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Progress bar below button */
+.progress-bar {
+    margin-top: 15px;
+    width: 0%;
+    height: 4px;
+    background-color: #0984e3;
+    border-radius: 4px;
+    transition: width 0.3s ease-in-out;
+}
+
+.hidden {
+    display: none;
+}
+
+/* Button styling fix */
+.login-btn {
+    background: #0984e3;
+    color: white;
+    padding: 0.75rem;
+    border: none;
+    border-radius: 8px;
+    font-size: 1rem;
+    cursor: pointer;
+    transition: background 0.3s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+.login-btn:hover {
+    background: #0066cc;
+}

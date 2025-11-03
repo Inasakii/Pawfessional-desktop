@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PawApp Login</title>
+  <link rel="stylesheet" href="../assets/css/login.css">
+</head>
+  <body>
+    <div class="container-handler">
+      <div class="container-img">
+        <img src="../assets/images/catcard.png" width="100%" height="100%">
+      </div>
+      <div class="container">
+        <div class="login-header">
+          <img src="../assets/images/PawLogo.png" width="60" height="60px">
+          <h1 class="title"><span>Paw</span>App</h1>
+        </div>
+        <div class="login-body">
+          <form id="loginForm">
+            <input type="text" id="username" placeholder="Enter Username" required>
+            <input type="password" id="password" placeholder="Enter Password" required>
+            <button id="loginBtn" class="login-btn" type="submit">
+              <span id="loginText">Login</span>
+              <span id="loadingIcon" class="loader hidden"></span>
+            </button>
+            <p class="error" id="errorMsg"></p>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const form = document.getElementById("loginForm");
+      const errorMsg = document.getElementById("errorMsg");
+
+      form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+
+        const username = document.getElementById("username").value;
+        const password = document.getElementById("password").value;
+
+        try {
+          // CORRECTED URL: Points to the new live server
+          const response = await fetch("https://pawfessional-api-server.onrender.com/api/desktop/login", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ username, password }),
+            credentials: "include"
+          });
+
+          const data = await response.json();
+
+          if (data.success) {
+            localStorage.setItem("currentUser", JSON.stringify(data.user));
+            window.location.href = "dash.html";
+          } else {
+            errorMsg.textContent = data.message;
+          }
+        } catch (error) {
+          console.error("Login Error:", error);
+          errorMsg.textContent = "Server error or cannot connect.";
+        }
+      });
+    </script>
+  </body>
+</html>

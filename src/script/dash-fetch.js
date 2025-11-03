@@ -1,0 +1,1383 @@
+document.addEventListener('DOMContentLoaded', () => {
+    // ===============================================
+    // SECTION: Authentication & Initialization
+    // ===============================================
+    const user = JSON.parse(localStorage.getItem('currentUser'));
+    if (!user) {
+        window.location.href = 'login.html';
+        return; // Stop script execution if not logged in
+    }
+
+    // Personalize header
+    const userNameEl = document.getElementById('userName');
+    const userAvatarEl = document.getElementById('userAvatar');
+    if (userNameEl) userNameEl.textContent = user.name;
+    if (userAvatarEl) userAvatarEl.textContent = user.name ? user.name[0].toUpperCase() : 'U';
+
+    // Role-Based Access Control
+    // Hide 'Team' nav item and content section if the user is a 'Staff'
+    if (user.role && user.role.toLowerCase() === 'staff') {
+        const teamNavItem = document.querySelector('.nav-item[data-target="team"]');
+        const teamContentSection = document.getElementById('team');
+        if (teamNavItem) teamNavItem.style.display = 'none';
+        if (teamContentSection) teamContentSection.style.display = 'none';
+    }
+
+
+    const API_BASE_URL = 'https://pawfessional-api-server.onrender.com/api/desktop';
+    const SERVER_URL_ROOT = 'https://pawfessional-api-server.onrender.com';
+    const socket = io(SERVER_URL_ROOT);
+
+    // ===============================================
+    // SECTION: DOM Element Selectors
+    // ===============================================
+    const contentTitle = document.getElementById('contentTitle');
+    const navItems = document.querySelectorAll('.nav-item');
+    const contentSections = document.querySelectorAll('.content-section');
+    const sidebar = document.getElementById('sidebar');
+    const toggleSidebarBtn = document.getElementById('toggleSidebar');
+    
+    // --- Modals ---
+    const logoutModal = document.getElementById('logoutModal');
+    const eventModal = document.getElementById('eventModal');
+    const eventDetailsModal = document.getElementById('eventDetails');
+    const confirmDeleteEventModal = document.getElementById('confirmDeleteEventModal');
+    const confirmDeleteAnalyticsModal = document.getElementById('confirmDeleteAnalyticsModal');
+    const successModal = document.getElementById('successModal');
+    const confirmDeleteStaffModal = document.getElementById('confirmDeleteStaffModal');
+    const confirmDeleteProductModal = document.getElementById('confirmDeleteProductModal');
+    const rescheduleModal = document.getElementById('rescheduleModal');
+    const walkInModal = document.getElementById('walkInModal');
+    const followUpModal = document.getElementById('followUpModal');
+
+    // --- Forms ---
+    const walkInForm = document.getElementById('walkInForm');
+    const followUpForm = document.getElementById('followUpForm');
+    const rescheduleForm = document.getElementById('rescheduleForm');
+    
+    // --- Modal-specific Elements ---
+    const walkInClientSelect = document.getElementById('walkInClientSelect');
+    const walkInPetSelect = document.getElementById('walkInPetSelect');
+    const scheduleFollowUpToggle = document.getElementById('scheduleFollowUpToggle');
+    const followUpFormFields = document.getElementById('followUpFormFields');
+
+    // --- Dashboard Stats ---
+    const totalProductsEl = document.getElementById('totalProductsCount');
+    const totalUsersEl = document.getElementById('totalUsersCount');
+    const totalStaffEl = document.getElementById('totalStaffCount');
+    const totalPetsEl = document.getElementById('totalPetsCount');
+    const appointmentsTodayEl = document.getElementById('appointmentsTodayCount');
+
+    // --- Analytics ---
+    let analyticsRecordToDeleteId = null;
+    const todaysBookedEl = document.getElementById('todaysBooked');
+    const todaysApprovedEl = document.getElementById('todaysApproved');
+    const todaysCompletedEl = document.getElementById('todaysCompleted');
+    const todaysCancelledEl = document.getElementById('todaysCancelled');
+    const analyticsRecordsTableBody = document.getElementById('analyticsRecordsTableBody');
+    const recentCancellationsTableBody = document.getElementById('recentCancellationsTableBody');
+    let monthlyProductivityChart = null;
+    let appointmentsPerDayChart = null;
+    let appointmentStatusPieChart = null;
+
+
+    // --- Appointments ---
+    const appointmentsTableBody = document.getElementById('appointmentsTableBody');
+    const conflictsList = document.getElementById('conflictsList');
+    const conflictsCard = document.getElementById('conflictsCard');
+    let appointmentStatusChart = null;
+
+    // --- Products ---
+    let selectedProductIds = [];
+    const productsGrid = document.getElementById("productsGrid");
+    const addProductBtn = document.getElementById("addProductBtn");
+    const editProductBtn = document.getElementById("editProductBtn");
+    const deleteProductBtn = document.getElementById("deleteProductBtn");
+    const addProductForm = document.getElementById("addProductForm");
+    const productForm = document.getElementById("productForm");
+    const productFormTitle = document.getElementById("productFormTitle");
+    const productSubmitBtn = document.getElementById("productSubmitBtn");
+    const cancelProductFormBtn = document.getElementById("cancelBtn");
+    const priceInput = document.getElementById('price');
+    const discountInput = document.getElementById('disc');
+    const discountDisplayInput = document.getElementById('disc_disp');
+    const stockInput = document.getElementById('stock');
+    const stockDisplayInput = document.getElementById('stock_disp');
+
+    // --- Team / Staff ---
+    let staffToDelete = null;
+    let onlineStaffIds = []; // To store online staff IDs
+    const staffTableBody = document.querySelector("#staffTable tbody");
+    const staffSearch = document.getElementById("staffSearch");
+    const staffStatusFilter = document.getElementById("staffStatusFilter");
+    const signupForm = document.getElementById('signupForm');
+
+    // --- Calendar ---
+    let calendar = null;
+    let eventToDeleteId = null;
+    const calendarEl = document.getElementById("calendar");
+    const eventForm = document.getElementById("calendarEventForm");
+    
+    // --- Logs ---
+    const logsTableBody = document.getElementById('logsTableBody');
+    const logWalkInBtn = document.getElementById('logWalkInBtn');
+    let currentAppointments = [];
+
+
+    // ===============================================
+    // SECTION: API & Data Fetching
+    // ===============================================
+    async function fetchData(endpoint, options = {}) {
+        try {
+            const response = await fetch(`${API_BASE_URL}${endpoint}`, options);
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({ message: `HTTP Error: ${response.status}` }));
+                throw new Error(errorData.message || `Failed to fetch from ${endpoint}`);
+            }
+             // Handle responses that might not have a JSON body (e.g., DELETE with 204 No Content)
+            if (response.status === 204) {
+                return { success: true };
+            }
+            return response.json();
+        } catch (error) {
+            console.error(`Error fetching ${endpoint}:`, error);
+            throw error;
+        }
+    }
+
+    const fetchDashboardStats = async () => {
+        try {
+            const stats = await fetchData('/dashboard-stats');
+            if(totalProductsEl) totalProductsEl.textContent = stats.totalProducts ?? '0';
+            if(totalUsersEl) totalUsersEl.textContent = stats.totalUsers ?? '0';
+            if(totalStaffEl) totalStaffEl.textContent = stats.totalStaff ?? '0';
+            if(totalPetsEl) totalPetsEl.textContent = stats.totalPets ?? '0';
+            if(appointmentsTodayEl) appointmentsTodayEl.textContent = stats.appointmentsToday ?? '0';
+        } catch (e) { /* ignore */ }
+    };
+
+    const fetchAnalyticsData = async () => {
+        try {
+            const [todayStats, records, cancellations] = await Promise.all([
+                fetchData('/analytics/today'),
+                fetchData('/analytics/records'),
+                fetchData('/analytics/recent-cancellations')
+            ]);
+            renderTodaysAnalytics(todayStats);
+            renderAnalyticsRecords(records);
+            renderRecentCancellations(cancellations);
+            renderMonthlyProductivityChart();
+            renderAppointmentsPerDayChart();
+            renderAppointmentStatusPieChart();
+        } catch (error) {
+            console.error("Failed to load analytics data:", error);
+        }
+    };
+
+    const fetchAppointments = async () => {
+        try {
+            const appointments = await fetchData('/appointments/all');
+            currentAppointments = appointments; // Store for later use
+            renderAppointmentsTable(appointments.filter(a => a.status && a.status.toLowerCase() === 'pending'));
+            findAndRenderConflicts(appointments);
+            updateAppointmentChart(appointments);
+            renderVisitLogs(appointments);
+        } catch(e) {
+            if(appointmentsTableBody) appointmentsTableBody.innerHTML = `<tr><td colspan="7" class="error-message">Could not load appointments.</td></tr>`;
+        }
+    };
+
+    const loadProducts = async () => {
+        try {
+            const products = await fetchData('/products');
+            displayProducts(products);
+        } catch (e) { /* ignore */ }
+    };
+
+    const loadStaff = async () => {
+        try {
+            const search = staffSearch?.value || "";
+            const status = staffStatusFilter?.value || "active";
+            const staff = await fetchData(`/staff?search=${encodeURIComponent(search)}&status=${status}`);
+            renderStaffTable(staff);
+        } catch(e) {
+            if(staffTableBody) staffTableBody.innerHTML = `<tr><td colspan="7">Failed to load staff.</td></tr>`;
+        }
+    };
+
+    const loadCalendarEvents = async () => {
+        if (!calendar) return;
+        try {
+            const events = await fetchData('/events');
+            calendar.getEventSources().forEach(src => src.remove());
+            calendar.addEventSource(events.map(ev => ({...ev, backgroundColor: getEventColor(ev.title), borderColor: getEventColor(ev.title)})));
+        } catch (e) { /* ignore */ }
+    };
+
+    // ===============================================
+    // SECTION: UI Rendering & Initialization
+    // ===============================================
+
+    function renderTodaysAnalytics(stats) {
+        if(todaysBookedEl) todaysBookedEl.textContent = stats.total_booked || '0';
+        if(todaysApprovedEl) todaysApprovedEl.textContent = stats.approved || '0';
+        if(todaysCompletedEl) todaysCompletedEl.textContent = stats.completed || '0';
+        if(todaysCancelledEl) todaysCancelledEl.textContent = stats.cancelled || '0';
+    }
+
+    function renderAnalyticsRecords(records) {
+        if (!analyticsRecordsTableBody) return;
+        analyticsRecordsTableBody.innerHTML = records.length === 0 
+            ? `<tr><td colspan="6" class="no-data-message">No historical records found.</td></tr>`
+            : records.map(record => `
+                <tr>
+                    <td>${new Date(record.record_date).toLocaleDateString()}</td>
+                    <td>${record.total_booked}</td>
+                    <td>${record.total_approved}</td>
+                    <td>${record.total_completed}</td>
+                    <td>
+                        <button class="action-btn delete" data-id="${record.id}"><i class="fas fa-trash"></i></button>
+                    </td>
+                </tr>
+            `).join('');
+    }
+
+    function renderRecentCancellations(cancellations) {
+        if (!recentCancellationsTableBody) return;
+        recentCancellationsTableBody.innerHTML = cancellations.length === 0
+            ? `<tr><td colspan="5" class="no-data-message">No recent cancellations found.</td></tr>`
+            : cancellations.map(cancel => `
+                <tr>
+                    <td>${cancel.client_name || 'N/A'}</td>
+                    <td>${cancel.pet_name || 'N/A'}</td>
+                    <td>${(cancel.services || []).join(', ')}</td>
+                    <td>${new Date(cancel.appointment_date).toLocaleDateString()}</td>
+                    <td>${cancel.cancelled_on ? new Date(cancel.cancelled_on).toLocaleString() : 'N/A'}</td>
+                </tr>
+            `).join('');
+    }
+
+    async function renderMonthlyProductivityChart() {
+        const ctx = document.getElementById('monthlyProductivityChart')?.getContext('2d');
+        if (!ctx) return;
+        try {
+            const { labels, data } = await fetchData('/analytics/monthly-productivity');
+            if (monthlyProductivityChart) monthlyProductivityChart.destroy();
+            
+            const average = data.length > 0 ? data.reduce((a, b) => a + b, 0) / data.length : 0;
+            const backgroundColors = data.map(val => val >= average ? 'rgba(16, 185, 129, 0.6)' : 'rgba(239, 68, 68, 0.6)');
+            const borderColors = data.map(val => val >= average ? 'rgba(16, 185, 129, 1)' : 'rgba(239, 68, 68, 1)');
+    
+            monthlyProductivityChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Completed Appointments',
+                        data: data,
+                        backgroundColor: backgroundColors,
+                        borderColor: borderColors,
+                        borderWidth: 1,
+                        borderRadius: 5,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: { beginAtZero: true, ticks: { stepSize: 1 } }
+                    },
+                    plugins: { legend: { display: false } }
+                }
+            });
+        } catch (e) { console.error("Failed to render monthly chart", e); }
+    }
+    
+    async function renderAppointmentsPerDayChart() {
+        const ctx = document.getElementById('appointmentsPerDayChart')?.getContext('2d');
+        if (!ctx) return;
+        try {
+            const { labels, data } = await fetchData('/analytics/daily-appointments');
+            if (appointmentsPerDayChart) appointmentsPerDayChart.destroy();
+            appointmentsPerDayChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Total Appointments',
+                        data: data,
+                        fill: true,
+                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                        borderColor: 'rgba(59, 130, 246, 1)',
+                        tension: 0.4,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: { beginAtZero: true, ticks: { stepSize: 1 } }
+                    },
+                    plugins: { legend: { display: false } }
+                }
+            });
+        } catch (e) { console.error("Failed to render daily chart", e); }
+    }
+    
+    async function renderAppointmentStatusPieChart() {
+        const ctx = document.getElementById('appointmentStatusPieChart')?.getContext('2d');
+        if (!ctx) return;
+        try {
+            const statusData = await fetchData('/analytics/status-distribution');
+            if (appointmentStatusPieChart) appointmentStatusPieChart.destroy();
+    
+            const labels = statusData.map(s => s.status);
+            const data = statusData.map(s => s.count);
+    
+            const colors = {
+                Pending: '#f59e0b', Approved: '#10b981', Cancelled: '#ef4444', 
+                Completed: '#3b82f6', 'No Show': '#64748b'
+            };
+            const backgroundColors = labels.map(label => colors[label] || '#a8a29e');
+            
+            appointmentStatusPieChart = new Chart(ctx, {
+                type: 'pie',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Appointments',
+                        data: data,
+                        backgroundColor: backgroundColors,
+                        borderColor: '#fff',
+                        borderWidth: 2,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { position: 'bottom' } }
+                }
+            });
+        } catch (e) { console.error("Failed to render status pie chart", e); }
+    }
+
+    function renderAppointmentsTable(appointments) {
+        if (!appointmentsTableBody) return;
+        const pendingAppointments = appointments.filter(a => a.status && a.status.toLowerCase() === 'pending');
+        
+        appointmentsTableBody.innerHTML = pendingAppointments.length === 0
+            ? `<tr><td colspan="7" class="no-data-message">No pending appointments found.</td></tr>`
+            : pendingAppointments.map(app => {
+                const status = app.status || '';
+                const statusClass = `status-${status.toLowerCase()}`;
+                const formattedDate = new Date(app.appointment_date).toLocaleDateString("en-US", { year: 'numeric', month: 'short', day: 'numeric' });
+                
+                const actionsHtml = `<button class="action-btn approve" data-id="${app.appointment_id}" title="Approve"><i class="fas fa-check-circle"></i></button>
+                                     <button class="action-btn cancel" data-id="${app.appointment_id}" title="Cancel"><i class="fas fa-times-circle"></i></button>`;
+    
+                return `<tr>
+                    <td>${app.client_name || 'N/A'}</td> <td>${app.pet_name || 'N/A'}</td>
+                    <td>${(app.services || []).join(', ')}</td> <td>${formattedDate}</td>
+                    <td>${app.appointment_time || 'N/A'}</td> <td><span class="status-badge ${statusClass}">${status || 'N/A'}</span></td>
+                    <td><div class="action-buttons">${actionsHtml}</div></td>
+                </tr>`;
+            }).join('');
+    }
+
+    function findAndRenderConflicts(appointments) {
+        if (!conflictsList) return;
+        const APPOINTMENT_DURATION_MINS = 30;
+        const pending = appointments.filter(a => a.status && a.status.toLowerCase() === 'pending');
+        const conflicts = new Map();
+    
+        const pendingByDate = pending.reduce((acc, curr) => {
+            const date = curr.appointment_date.split('T')[0];
+            if (!acc[date]) acc[date] = [];
+            acc[date].push(curr);
+            return acc;
+        }, {});
+    
+        for (const date in pendingByDate) {
+            const dayAppointments = pendingByDate[date].sort((a,b) => a.appointment_time.localeCompare(b.appointment_time));
+            for (let i = 0; i < dayAppointments.length; i++) {
+                const app1 = dayAppointments[i];
+                if (!app1.appointment_time) continue;
+                const app1Start = new Date(`${date}T${app1.appointment_time}`);
+                const app1End = new Date(app1Start.getTime() + APPOINTMENT_DURATION_MINS * 60000);
+    
+                for (let j = i + 1; j < dayAppointments.length; j++) {
+                    const app2 = dayAppointments[j];
+                    if (!app2.appointment_time) continue;
+                    const app2Start = new Date(`${date}T${app2.appointment_time}`);
+    
+                    if (app2Start < app1End) { // Overlap detected
+                        if (!conflicts.has(app1.appointment_id)) conflicts.set(app1.appointment_id, app1);
+                        if (!conflicts.has(app2.appointment_id)) conflicts.set(app2.appointment_id, app2);
+                    }
+                }
+            }
+        }
+        
+        const conflictArray = Array.from(conflicts.values());
+        if (conflictArray.length === 0) {
+            conflictsList.innerHTML = `<li class="no-data-message">No conflicts detected.</li>`;
+            return;
+        }
+
+        conflictsList.innerHTML = conflictArray.map(c => `
+            <li class="conflict-item">
+                <div class="conflict-info">
+                    <strong>${c.pet_name}</strong> (${c.client_name})
+                    <small>${new Date(c.appointment_date).toLocaleDateString()} at ${c.appointment_time}</small>
+                </div>
+                <button class="action-btn reschedule" data-id="${c.appointment_id}" title="Reschedule">
+                    <i class="fas fa-edit"></i>
+                </button>
+            </li>
+        `).join('');
+    }
+
+    function updateAppointmentChart(appointments) {
+        const ctx = document.getElementById("appointmentStatusChart")?.getContext("2d");
+        if (!ctx) return;
+    
+        const statusCounts = appointments.reduce((acc, curr) => {
+            const knownStatuses = ['Pending', 'Approved', 'Completed', 'No Show', 'Cancelled'];
+            let status = curr.status || 'Unknown'; 
+    
+            let capitalizedStatus = status.charAt(0).toUpperCase() + status.slice(1).toLowerCase();
+    
+            if (!knownStatuses.includes(capitalizedStatus)) {
+                capitalizedStatus = 'Cancelled'; // Map 'Rejected' and others to 'Cancelled' for the chart
+            }
+    
+            acc[capitalizedStatus] = (acc[capitalizedStatus] || 0) + 1;
+            return acc;
+        }, {});
+    
+        const labels = Object.keys(statusCounts);
+        const data = Object.values(statusCounts);
+        
+        const colors = {
+            Pending: '#f59e0b',
+            Approved: '#10b981',
+            Cancelled: '#ef4444', 
+            Completed: '#3b82f6',
+            'No Show': '#64748b'
+        };
+        const backgroundColors = labels.map(label => colors[label] || '#a8a29e');
+    
+        if (appointmentStatusChart) {
+            appointmentStatusChart.data.labels = labels;
+            appointmentStatusChart.data.datasets[0].data = data;
+            appointmentStatusChart.data.datasets[0].backgroundColor = backgroundColors;
+            appointmentStatusChart.update();
+        } else {
+            appointmentStatusChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Appointments',
+                        data: data,
+                        backgroundColor: backgroundColors,
+                        borderColor: '#fff',
+                        borderWidth: 3,
+                        hoverOffset: 8,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '70%',
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                usePointStyle: true,
+                                pointStyle: 'circle',
+                                boxWidth: 8,
+                                padding: 20,
+                                font: { size: 12 }
+                            }
+                        },
+                        tooltip: {
+                            backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                            titleFont: { size: 14, weight: 'bold' },
+                            bodyFont: { size: 12 },
+                            padding: 10,
+                            cornerRadius: 8,
+                            callbacks: {
+                                label: function(context) {
+                                    const label = context.label || '';
+                                    const value = context.parsed || 0;
+                                    const total = context.chart.data.datasets[0].data.reduce((a, b) => a + b, 0);
+                                    const percentage = total > 0 ? ((value / total) * 100).toFixed(1) + '%' : '0%';
+                                    return `${label}: ${value} (${percentage})`;
+                                }
+                            }
+                        }
+                    },
+                    animation: {
+                        animateScale: true,
+                        animateRotate: true
+                    }
+                }
+            });
+        }
+    }
+
+
+    function displayProducts(products) {
+        if (!productsGrid) return;
+        if (totalProductsEl) totalProductsEl.textContent = products.length;
+    
+        productsGrid.innerHTML = products.map(product => {
+            const formattedDate = product.created_at ? new Date(product.created_at).toLocaleDateString('en-US') : 'N/A';
+            const petTypeClass = product.petType ? product.petType.toLowerCase().replace(/\s+/g, '-') : 'general';
+            
+            let priceHtml = `₱${product.price ? parseFloat(product.price).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 'N/A'}`;
+            if (product.disc && parseFloat(product.disc) > 0) {
+                const discountedPrice = product.price * (1 - product.disc / 100);
+                priceHtml = `
+                    <span class="price-original">₱${parseFloat(product.price).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    <span class="price-discounted">₱${discountedPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                `;
+            }
+
+            return `
+            <div class="product-card" data-id="${product.id}">
+                <div class="img-prod-box">
+                    <img src="${product.image ? `${SERVER_URL_ROOT}${product.image}` : 'https://placehold.co/300x200/EEE/31343C?text=No+Image'}" 
+                         alt="${product.pname}" 
+                         class="product-image"
+                         onerror="this.onerror=null; this.src='https://placehold.co/300x200/EEE/31343C?text=Image+Not+Found';"/>
+                </div>
+                <div class="product-info">
+                    <h3 class="product-title">${product.pname}</h3>
+                    <p class="product-description">${product.description || 'No description available.'}</p>
+                    <div class="product-details">
+                        <p><strong>Brand:</strong> ${product.brand || 'N/A'}</p>
+                        <p><strong>Category:</strong> ${product.category || 'N/A'}</p>
+                    </div>
+                    <div class="product-meta">
+                        <div class="product-tags">
+                            <span class="pet-tag pet-tag-${petTypeClass}">${product.petType || 'General'}</span>
+                        </div>
+                        <div class="price">${priceHtml}</div>
+                    </div>
+                    <div class="product-footer">
+                        <span class="product-date">Added: ${formattedDate}</span>
+                    </div>
+                </div>
+            </div>`;
+        }).join('');
+    }
+
+    function renderStaffTable(staffList) {
+        if (!staffTableBody) return;
+        staffTableBody.innerHTML = staffList.length === 0
+        ? `<tr><td colspan="7">No staff found.</td></tr>`
+        : staffList.map(staff => {
+            const isOnline = onlineStaffIds.includes(staff.id);
+            return `
+            <tr data-staff-id="${staff.id}">
+                <td>${staff.id}</td>
+                <td>
+                    <div class="staff-name-cell">
+                        <span>${staff.name}</span>
+                        <span title="${isOnline ? 'Online' : 'Offline'}" class="status-indicator ${isOnline ? 'online' : 'offline'}"></span>
+                    </div>
+                </td>
+                <td>${staff.role}</td>
+                <td>${staff.contact}</td>
+                <td><span class="status-badge status-${staff.status.toLowerCase()}">${staff.status}</span></td>
+                <td>${new Date(staff.hired_date).toLocaleDateString()}</td>
+                <td>
+                    <button class="action-btn delete" data-id="${staff.id}"><i class="fas fa-trash"></i> Delete</button>
+                </td>
+            </tr>
+        `}).join('');
+    }
+
+    function renderVisitLogs(appointments) {
+        if (!logsTableBody) return;
+    
+        const relevantStatuses = ['approved', 'cancelled', 'completed', 'no show'];
+        const relevantLogs = appointments.filter(log => log.status && relevantStatuses.includes(log.status.toLowerCase()));
+    
+        logsTableBody.innerHTML = relevantLogs.length === 0
+            ? `<tr><td colspan="6" class="no-data-message">No relevant visit logs found.</td></tr>`
+            : relevantLogs.map(log => {
+                const formattedDate = new Date(log.appointment_date).toLocaleDateString("en-US", { year: 'numeric', month: 'short', day: 'numeric' });
+                const status = log.status.toLowerCase();
+                const services = (log.services || []).map(s => s.toLowerCase());
+                
+                let actionsHtml = '-';
+                if (status === 'approved') {
+                    actionsHtml = `<button class="action-btn confirm-arrival" data-id="${log.appointment_id}" title="Confirm Arrival"><i class="fas fa-check-square"></i> Confirm Arrival</button>`;
+                } else if (status === 'completed') {
+                    if (services.includes('vaccination') || services.includes('check up')) {
+                         actionsHtml = `<button class="btn btn-secondary book-follow-up-btn" 
+                                            data-user-id="${log.user_id}" 
+                                            data-pet-id="${log.pet_id}"
+                                            data-client-name="${log.client_name || 'Client'}"
+                                            data-pet-name="${log.pet_name || 'Pet'}">
+                                            <i class="fas fa-calendar-plus"></i> Book Follow-up
+                                        </button>`;
+                    } else {
+                        actionsHtml = `<span class="action-completed"><i class="fas fa-check-circle"></i> Completed</span>`;
+                    }
+                }
+    
+                return `
+                    <tr data-appointment-id="${log.appointment_id}" data-status="${status}">
+                        <td>${log.client_name || 'N/A'}</td>
+                        <td>${log.pet_name || 'N/A'}</td>
+                        <td>${(log.services || []).join(', ')}</td>
+                        <td>${formattedDate}</td>
+                        <td><span class="status-badge status-${status}">${log.status}</span></td>
+                        <td><div class="action-buttons">${actionsHtml}</div></td>
+                    </tr>
+                `;
+            }).join('');
+    }
+
+
+    function initializeCalendar() {
+        if (!calendarEl) return;
+        calendar = new FullCalendar.Calendar(calendarEl, {
+            initialView: "dayGridMonth",
+            headerToolbar: { left: "prev,next today", center: "title", right: "dayGridMonth,timeGridWeek,timeGridDay" },
+            selectable: true, dayMaxEvents: 3,
+            dateClick: (info) => openEventModal(info.date),
+            select: (info) => openEventModal(info.start, info.end),
+            eventClick: (info) => showEventDetailsModal(info.event),
+            height: "auto", aspectRatio: 1.8,
+        });
+        calendar.render();
+        loadCalendarEvents();
+    }
+    
+    // ===============================================
+    // SECTION: Modals & UI Helpers
+    // ===============================================
+    function toggleModal(modal, show) { if (modal) modal.style.display = show ? 'flex' : 'none'; }
+
+    function formatAmPm(date) {
+        if (!(date instanceof Date) || isNaN(date)) return '';
+        let hours = date.getHours();
+        let minutes = date.getMinutes();
+        const ampm = hours >= 12 ? 'PM' : 'AM';
+        hours = hours % 12;
+        hours = hours ? hours : 12; // the hour '0' should be '12'
+        const minutesStr = minutes < 10 ? '0' + minutes : minutes;
+        return `${hours}:${minutesStr} ${ampm}`;
+    }
+
+    function openEventModal(start, end) {
+        if (!eventForm) return;
+        eventForm.reset();
+        
+        const startDate = new Date(start);
+        let endDate;
+
+        // Is this a selection on the day grid (where times are 00:00)?
+        const isDayGridSelection = end && startDate.getHours() === 0 && startDate.getMinutes() === 0;
+
+        if (isDayGridSelection) {
+            // For any day grid selection (single or multi-day), default to a convenient time on the start date.
+            startDate.setHours(8, 0, 0, 0);
+            endDate = new Date(startDate.getTime() + 60 * 60 * 1000); // 1-hour duration.
+        } else if (end) {
+            // This is likely a time-grid selection where start/end times are meaningful.
+            endDate = new Date(end);
+        } else {
+            // This is a click on a day ('dateClick' callback, end is null).
+            // Default to 8 AM on the clicked day.
+            if (startDate.getHours() === 0 && startDate.getMinutes() === 0) {
+                 startDate.setHours(8, 0, 0, 0);
+            }
+            endDate = new Date(startDate.getTime() + 60 * 60 * 1000); // 1-hour duration.
+        }
+        
+        eventForm.querySelector('#calendarEventStart').value = formatForDatetimeLocal(startDate);
+        eventForm.querySelector('#calendarEventEnd').value = formatForDatetimeLocal(endDate);
+        toggleModal(eventModal, true);
+    }
+    
+    function showEventDetailsModal(event) {
+        const infoEl = document.getElementById("eventInfo");
+        const deleteBtn = document.getElementById("deleteEventBtn");
+        if (!infoEl || !deleteBtn) return;
+        
+        eventToDeleteId = event.id;
+
+        const start = event.start; // These are already Date objects from FullCalendar
+        const end = event.end;
+        
+        if (!start) return;
+
+        // Check if the event should be treated as an all-day event for display purposes.
+        // This is true if the event object says so, or if it starts and ends at midnight.
+        const isAllDay = event.allDay || (
+            start.getHours() === 0 && start.getMinutes() === 0 &&
+            end && end.getHours() === 0 && end.getMinutes() === 0 &&
+            end.getTime() > start.getTime()
+        );
+        
+        const dateStr = start.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
+        
+        let timeStr;
+        if (isAllDay) {
+            timeStr = 'All-day event';
+        } else {
+            const startTime = formatAmPm(start);
+            const endTime = (end && end.getTime() > start.getTime()) 
+                          ? formatAmPm(end) 
+                          : null;
+            timeStr = endTime ? `${startTime} - ${endTime}` : startTime;
+        }
+
+        const pet = event.extendedProps?.pet || "Any";
+        const notes = event.extendedProps?.notes || "No additional notes.";
+
+        infoEl.innerHTML = `
+            <h3>Event: "${event.title}"</h3>
+            <div class="eventDetails-body">
+                <p class="eventDetails-form">
+                    <i class="fas fa-clock"></i>
+                    <strong>Time:</strong> ${timeStr}
+                </p>
+                <p class="eventDetails-form">
+                    <i class="fas fa-paw"></i>
+                    <strong>Pet Type:</strong> ${pet}
+                </p>
+                <p class="eventDetails-form">
+                    <i class="fas fa-sticky-note"></i>
+                    <strong>Notes:</strong> ${notes}
+                </p>
+            </div>
+            <div class="eventModal-footer">
+                <strong>Date:</strong> ${dateStr}
+            </div>`;
+        toggleModal(eventDetailsModal, true);
+    }
+    
+function getEventColor(title) {
+    const colors = {
+        "Free Check Up": "#28a745",
+        "Vaccination": "#17a2b8",
+        "Routine Exam": "#ffc107",
+        "Dental Cleaning": "#fd7e14",
+        "Surgery": "#dc3545",
+        "Emergency Treatment": "#6f42c1",
+        "Spay/Neuter": "#e83e8c",
+        "Retail Only Day": "#3b82f6",
+        "Clinic Closed": "#64748b"
+    };
+    return colors[title] || "#4f46e5";
+}
+
+
+function formatForDatetimeLocal(date) {
+    const d = new Date(date);
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    const hours = String(d.getHours()).padStart(2, '0');
+    const minutes = String(d.getMinutes()).padStart(2, '0');
+    return `${year}-${month}-${day}T${hours}:${minutes}`;
+}
+
+
+    // ===============================================
+    // SECTION: Event Handlers
+    // ===============================================
+    
+    toggleSidebarBtn?.addEventListener('click', () => sidebar?.classList.toggle('collapsed'));
+
+    navItems.forEach(item => {
+        item.addEventListener('click', () => {
+            if (item.classList.contains('logout')) {
+                 toggleModal(logoutModal, true); 
+                 return;
+            }
+            navItems.forEach(i => i.classList.remove('active'));
+            item.classList.add('active');
+            const targetId = item.getAttribute('data-target');
+            if (contentTitle) contentTitle.textContent = `${targetId.charAt(0).toUpperCase() + targetId.slice(1)} Overview`;
+            contentSections.forEach(section => section.classList.toggle('active', section.id === targetId));
+            if (targetId === 'calendar' && calendar) setTimeout(() => calendar.updateSize(), 200);
+            if (targetId === 'analytics') fetchAnalyticsData();
+        });
+    });
+
+    document.getElementById('cancelLogout')?.addEventListener('click', () => toggleModal(logoutModal, false));
+    document.getElementById('confirmLogout')?.addEventListener('click', async () => {
+        try {
+            await fetchData('/logout', { method: 'POST' });
+        } finally {
+            localStorage.removeItem('currentUser');
+            window.location.href = 'login.html';
+        }
+    });
+    
+    appointmentsTableBody?.addEventListener('click', (event) => {
+        const button = event.target.closest('.action-btn');
+        if (!button) return;
+        const id = button.dataset.id;
+        const status = button.classList.contains('approve') ? 'Approved' : 'Cancelled';
+        if (confirm(`Are you sure you want to ${status.toLowerCase()} this appointment?`)) {
+            fetchData(`/appointments/${id}/status`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }) });
+        }
+    });
+
+    // --- Analytics ---
+    analyticsRecordsTableBody?.addEventListener('click', (e) => {
+        const button = e.target.closest('button.delete');
+        if (button) {
+            analyticsRecordToDeleteId = button.dataset.id;
+            toggleModal(confirmDeleteAnalyticsModal, true);
+        }
+    });
+
+    document.getElementById('cancelDeleteAnalyticsBtn')?.addEventListener('click', () => {
+        toggleModal(confirmDeleteAnalyticsModal, false);
+    });
+
+    document.getElementById('confirmDeleteAnalyticsBtn')?.addEventListener('click', async () => {
+        if (!analyticsRecordToDeleteId) return;
+        try {
+            await fetchData(`/analytics/records/${analyticsRecordToDeleteId}`, { method: 'DELETE' });
+            toggleModal(confirmDeleteAnalyticsModal, false);
+        } catch (error) {
+            alert('Failed to delete record.');
+        } finally {
+            analyticsRecordToDeleteId = null;
+        }
+    });
+
+    // --- Walk-in Logic ---
+    logWalkInBtn?.addEventListener('click', async () => {
+        walkInForm.reset();
+        
+        // Reset toggle and hide follow-up form
+        if (scheduleFollowUpToggle) scheduleFollowUpToggle.checked = false;
+        if (followUpFormFields) followUpFormFields.style.display = 'none';
+
+        walkInClientSelect.innerHTML = '<option value="">Loading clients...</option>';
+        walkInPetSelect.innerHTML = '<option value="">Select a client first</option>';
+        walkInPetSelect.disabled = true;
+        
+        toggleModal(walkInModal, true);
+
+        try {
+            const users = await fetchData('/users/list');
+            walkInClientSelect.innerHTML = '<option value="">Select a client</option>' + users.map(u => `<option value="${u.user_id}">${u.fullname}</option>`).join('');
+        } catch (error) {
+            walkInClientSelect.innerHTML = '<option value="">Could not load clients</option>';
+        }
+    });
+
+    scheduleFollowUpToggle?.addEventListener('change', (e) => {
+        followUpFormFields.style.display = e.target.checked ? 'block' : 'none';
+        if (!e.target.checked) {
+            // Clear follow-up fields when toggled off to avoid submitting old data
+            document.getElementById('walkInFollowUpService').value = '';
+            document.getElementById('walkInFollowUpDate').value = '';
+            document.getElementById('walkInFollowUpTime').value = '';
+            document.getElementById('walkInFollowUpNotes').value = '';
+        }
+    });
+
+    walkInClientSelect?.addEventListener('change', async (e) => {
+        const userId = e.target.value;
+        walkInPetSelect.innerHTML = '<option value="">Loading pets...</option>';
+        walkInPetSelect.disabled = true;
+
+        if (!userId) {
+            walkInPetSelect.innerHTML = '<option value="">Select a client first</option>';
+            return;
+        }
+
+        try {
+            const pets = await fetchData(`/pets/list/${userId}`);
+            walkInPetSelect.innerHTML = '<option value="">Select a pet</option>' + pets.map(p => `<option value="${p.pet_id}">${p.pet_name}</option>`).join('');
+            walkInPetSelect.disabled = false;
+        } catch (error) {
+            walkInPetSelect.innerHTML = '<option value="">Could not load pets</option>';
+        }
+    });
+
+    walkInForm?.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        const isFollowUpScheduled = scheduleFollowUpToggle && scheduleFollowUpToggle.checked;
+        const followUpService = document.getElementById('walkInFollowUpService').value;
+        const followUpDate = document.getElementById('walkInFollowUpDate').value;
+        const followUpTime = document.getElementById('walkInFollowUpTime').value;
+
+        if (isFollowUpScheduled && (!followUpService || !followUpDate || !followUpTime)) {
+            alert("For a follow-up, please provide a service, date, and time.");
+            return;
+        }
+
+        const payload = {
+            userId: document.getElementById('walkInClientSelect').value,
+            petId: document.getElementById('walkInPetSelect').value,
+            todayServices: Array.from(document.querySelectorAll('#walkInServices input:checked')).map(cb => cb.value),
+            followUpService: isFollowUpScheduled ? followUpService : '',
+            followUpDate: isFollowUpScheduled ? followUpDate : '',
+            followUpTime: isFollowUpScheduled ? followUpTime : '',
+            followUpNotes: isFollowUpScheduled ? document.getElementById('walkInFollowUpNotes').value : '',
+        };
+
+        if(!payload.userId || !payload.petId || payload.todayServices.length === 0) {
+            alert('Please select a client, pet, and at least one service for today\'s visit.');
+            return;
+        }
+
+        try {
+            await fetchData('/log-walk-in', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            alert('Walk-in visit logged successfully!');
+            toggleModal(walkInModal, false);
+        } catch (error) {
+            alert('Failed to log walk-in visit. ' + error.message);
+        }
+    });
+
+    document.getElementById('cancelWalkInBtn')?.addEventListener('click', () => toggleModal(walkInModal, false));
+
+    // --- Visit Logs & Follow-up Logic ---
+    logsTableBody?.addEventListener('click', async (event) => {
+        const arrivalButton = event.target.closest('.action-btn.confirm-arrival');
+        if (arrivalButton) {
+            const id = arrivalButton.dataset.id;
+            if (confirm('Confirm this client has arrived? This will complete the visit.')) {
+                fetchData(`/appointments/${id}/confirm-visit`, { method: 'POST' })
+                    .catch(err => alert('An error occurred: ' + err.message));
+            }
+            return; 
+        }
+
+        const followUpButton = event.target.closest('.book-follow-up-btn');
+        if(followUpButton) {
+            const { userId, petId, clientName, petName } = followUpButton.dataset;
+            
+            document.getElementById('followUpUserId').value = userId;
+            document.getElementById('followUpPetId').value = petId;
+            document.getElementById('followUpInfo').innerHTML = `Booking for <strong>${petName}</strong> (Owner: ${clientName})`;
+            followUpForm.reset();
+            toggleModal(followUpModal, true);
+        }
+    });
+
+    followUpForm?.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const payload = {
+            user_id: document.getElementById('followUpUserId').value,
+            pet_id: document.getElementById('followUpPetId').value,
+            services: [document.getElementById('followUpServiceSelect').value],
+            appointment_date: document.getElementById('followUpDateInput').value,
+            appointment_time: document.getElementById('followUpTimeInput').value,
+            notes: document.getElementById('followUpNotesInput').value,
+        };
+
+        if(!payload.user_id || !payload.pet_id || !payload.services[0] || !payload.appointment_date || !payload.appointment_time) {
+            alert('Please fill out all required fields for the follow-up, including time.');
+            return;
+        }
+
+        try {
+            await fetchData('/appointments', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            alert('Follow-up booked successfully! The client has been notified.');
+            toggleModal(followUpModal, false);
+        } catch (error) {
+            alert('Failed to book follow-up. ' + error.message);
+        }
+    });
+    
+    document.getElementById('cancelFollowUpBtn')?.addEventListener('click', () => toggleModal(followUpModal, false));
+    
+    // --- Conflict Rescheduling ---
+    conflictsCard?.addEventListener('click', async (e) => {
+        const button = e.target.closest('button.reschedule');
+        if (!button) return;
+        const id = button.dataset.id;
+        const appointment = currentAppointments.find(a => a.appointment_id == id);
+        if (appointment) {
+            document.getElementById('rescheduleAppointmentId').value = id;
+            document.getElementById('rescheduleInfo').textContent = `Rescheduling for ${appointment.pet_name} (${appointment.client_name}).`;
+            const [year, month, day] = appointment.appointment_date.split('T')[0].split('-');
+            document.getElementById('rescheduleDate').value = `${year}-${month}-${day}`;
+            document.getElementById('rescheduleTime').value = appointment.appointment_time;
+            document.getElementById('rescheduleNotes').value = '';
+            toggleModal(rescheduleModal, true);
+        }
+    });
+
+    rescheduleForm?.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const id = document.getElementById('rescheduleAppointmentId').value;
+        const payload = {
+            appointment_date: document.getElementById('rescheduleDate').value,
+            appointment_time: document.getElementById('rescheduleTime').value,
+            admin_notes: document.getElementById('rescheduleNotes').value
+        };
+        await fetchData(`/appointments/${id}/reschedule`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        toggleModal(rescheduleModal, false);
+    });
+    document.getElementById('cancelRescheduleBtn')?.addEventListener('click', () => toggleModal(rescheduleModal, false));
+
+
+    // --- Products ---
+    function updateProductActionButtons() {
+        const selectedCount = selectedProductIds.length;
+        if (deleteProductBtn) deleteProductBtn.style.display = selectedCount > 0 ? "inline-block" : "none";
+        if (editProductBtn) {
+            editProductBtn.style.display = selectedCount === 1 ? "inline-block" : "none";
+            editProductBtn.disabled = selectedCount !== 1;
+        }
+    }
+
+    productsGrid?.addEventListener("click", (e) => {
+        if (e.target.closest('.action-btn')) return;
+        const card = e.target.closest('.product-card');
+        if (!card) return;
+    
+        const id = parseInt(card.dataset.id, 10);
+        const isSelected = card.classList.toggle('selected');
+    
+        if (isSelected) {
+            if (!selectedProductIds.includes(id)) selectedProductIds.push(id);
+        } else {
+            selectedProductIds = selectedProductIds.filter(i => i !== id);
+        }
+        updateProductActionButtons();
+    });
+
+    document.addEventListener('click', (e) => {
+        const productSection = document.getElementById('product');
+        if (productSection && !productSection.contains(e.target) && !e.target.closest('.modal')) {
+            if (selectedProductIds.length > 0) {
+                 selectedProductIds = [];
+                 document.querySelectorAll('.product-card.selected').forEach(card => card.classList.remove('selected'));
+                 updateProductActionButtons();
+            }
+        }
+    });
+
+    addProductBtn?.addEventListener("click", () => {
+        productForm.reset();
+        document.getElementById('productId').value = '';
+        productFormTitle.textContent = 'Add New Product';
+        productSubmitBtn.textContent = 'Save Product';
+        addProductForm.style.display = "block";
+        if(discountDisplayInput) discountDisplayInput.value = '';
+        if(stockDisplayInput) stockDisplayInput.value = '';
+    });
+    
+    editProductBtn?.addEventListener("click", async () => {
+        if (selectedProductIds.length !== 1) return;
+        const productId = selectedProductIds[0];
+        try {
+            const product = await fetchData(`/products/${productId}`);
+            document.getElementById('productId').value = product.id;
+            document.getElementById('pname').value = product.pname;
+            document.getElementById('brand').value = product.brand;
+            document.getElementById('category').value = product.category;
+            document.getElementById('life_stage').value = product.life_stage;
+            document.getElementById('price').value = product.price;
+            document.getElementById('petType').value = product.petType;
+            document.getElementById('disc').value = product.disc;
+            document.getElementById('description').value = product.description;
+            document.getElementById('stock').value = product.stock;
+            updateDiscountDisplay();
+            updateStockDisplay();
+            productFormTitle.textContent = 'Edit Product';
+            productSubmitBtn.textContent = 'Update Product';
+            addProductForm.style.display = 'block';
+        } catch (error) {
+            alert('Failed to fetch product details.');
+        }
+    });
+
+    cancelProductFormBtn?.addEventListener("click", () => {
+        addProductForm.style.display = "none";
+        productForm.reset();
+    });
+
+    productForm?.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const formData = new FormData(productForm);
+        const productId = formData.get('id');
+        
+        try {
+            if (productId) {
+                await fetchData(`/products/${productId}`, { method: "PATCH", body: formData });
+            } else {
+                await fetchData('/add-product', { method: "POST", body: formData });
+            }
+            addProductForm.style.display = "none";
+            productForm.reset();
+            selectedProductIds = [];
+            document.querySelectorAll('.product-card.selected').forEach(c => c.classList.remove('selected'));
+            updateProductActionButtons();
+        } catch (error) {
+            alert(`Failed to ${productId ? 'update' : 'add'} product.`);
+        }
+    });
+
+    deleteProductBtn?.addEventListener("click", () => toggleModal(confirmDeleteProductModal, true));
+    document.getElementById('cancelDeleteProductBtn')?.addEventListener('click', () => toggleModal(confirmDeleteProductModal, false));
+    document.getElementById('confirmDeleteProductBtn')?.addEventListener('click', async () => {
+        await fetchData('/delete-products', { method: "DELETE", headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids: selectedProductIds }) });
+        toggleModal(confirmDeleteProductModal, false);
+        selectedProductIds = [];
+        updateProductActionButtons();
+    });
+
+    const updateDiscountDisplay = () => {
+        const price = parseFloat(priceInput.value);
+        const discount = parseFloat(discountInput.value);
+        if (!isNaN(price) && !isNaN(discount) && discount >= 0 && discount <= 100) {
+            const finalPrice = price * (1 - discount / 100);
+            discountDisplayInput.value = finalPrice.toFixed(2);
+        } else {
+            discountDisplayInput.value = '';
+        }
+    };
+
+    const updateStockDisplay = () => {
+        const stock = parseInt(stockInput.value, 10);
+        if (isNaN(stock) || stock < 0) {
+            stockDisplayInput.value = 'Invalid Quantity';
+        } else if (stock === 0) {
+            stockDisplayInput.value = 'Out of Stock';
+        } else if (stock <= 10) {
+            stockDisplayInput.value = `Low Stock (${stock})`;
+        } else {
+            stockDisplayInput.value = `In Stock (${stock})`;
+        }
+    };
+
+    priceInput?.addEventListener('input', updateDiscountDisplay);
+    discountInput?.addEventListener('input', updateDiscountDisplay);
+    stockInput?.addEventListener('input', updateStockDisplay);
+
+
+    // --- Staff ---
+    signupForm?.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const formData = new FormData(signupForm);
+        const payload = Object.fromEntries(formData.entries());
+        await fetchData('/staff', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        toggleModal(successModal, true);
+        setTimeout(() => toggleModal(successModal, false), 2000);
+        signupForm.reset();
+    });
+
+    staffTableBody?.addEventListener('click', e => {
+        const button = e.target.closest('button.delete');
+        if (button) {
+            staffToDelete = button.dataset.id;
+            toggleModal(confirmDeleteStaffModal, true);
+        }
+    });
+    
+    document.getElementById('cancelDeleteStaffBtn')?.addEventListener('click', () => toggleModal(confirmDeleteStaffModal, false));
+    document.getElementById('confirmDeleteStaffBtn')?.addEventListener('click', async () => {
+        if (!staffToDelete) return;
+        await fetchData(`/staff/${staffToDelete}`, { method: 'DELETE' });
+        toggleModal(confirmDeleteStaffModal, false);
+    });
+    
+    staffSearch?.addEventListener('input', loadStaff);
+    staffStatusFilter?.addEventListener('change', loadStaff);
+
+    // ===============================================
+    // SECTION: Team Management Form Enhancements
+    // ===============================================
+    const staffFnameInput = document.getElementById('staffFname');
+    const staffLnameInput = document.getElementById('staffLname');
+    const phoneInput = document.getElementById('phoneNumber');
+    const passwordInput = document.getElementById('staffPass');
+    const togglePassword = document.getElementById('togglePassword');
+    const strengthMeter = document.getElementById('strengthMeter');
+    const strengthText = document.getElementById('strengthText');
+    const passwordStrengthIndicator = document.getElementById('passwordStrengthIndicator');
+
+    // Auto-capitalize first letter
+    const capitalizeInput = (e) => {
+        const input = e.target;
+        if (input.value.length > 0) {
+            input.value = input.value.charAt(0).toUpperCase() + input.value.slice(1);
+        }
+    };
+    if (staffFnameInput) staffFnameInput.addEventListener('input', capitalizeInput);
+    if (staffLnameInput) staffLnameInput.addEventListener('input', capitalizeInput);
+
+    // Numeric only for phone number
+    if (phoneInput) {
+        phoneInput.addEventListener('input', (e) => {
+            e.target.value = e.target.value.replace(/[^0-9]/g, '');
+        });
+    }
+
+    // Password visibility toggle
+    if (togglePassword && passwordInput) {
+        togglePassword.addEventListener('click', () => {
+            const type = passwordInput.getAttribute('type') === 'password' ? 'text' : 'password';
+            passwordInput.setAttribute('type', type);
+            // Toggle icon
+            const icon = togglePassword.querySelector('i');
+            icon.classList.toggle('fa-eye');
+            icon.classList.toggle('fa-eye-slash');
+        });
+    }
+
+    // Password strength meter
+    if (passwordInput && passwordStrengthIndicator && strengthMeter && strengthText) {
+        passwordInput.addEventListener('input', () => {
+            const pass = passwordInput.value;
+            let score = 0;
+            if (pass.length >= 8) score++;
+            if (pass.match(/[a-z]/)) score++;
+            if (pass.match(/[A-Z]/)) score++;
+            if (pass.match(/[0-9]/)) score++;
+            if (pass.match(/[^a-zA-Z0-9]/)) score++;
+
+            if (pass.length === 0) {
+                 passwordStrengthIndicator.style.display = 'none';
+                 return;
+            }
+            passwordStrengthIndicator.style.display = 'block';
+            
+            const strengthMeterBar = strengthMeter.firstElementChild;
+            if (!strengthMeterBar) { // Create it if it doesn't exist
+                const bar = document.createElement('div');
+                strengthMeter.appendChild(bar);
+            }
+
+            switch (score) {
+                case 0:
+                case 1:
+                case 2:
+                    strengthMeter.firstElementChild.style.width = '25%';
+                    strengthMeter.firstElementChild.style.backgroundColor = '#ef4444'; // red
+                    strengthText.textContent = 'Weak';
+                    strengthText.style.color = '#ef4444';
+                    break;
+                case 3:
+                    strengthMeter.firstElementChild.style.width = '50%';
+                    strengthMeter.firstElementChild.style.backgroundColor = '#f59e0b'; // orange
+                    strengthText.textContent = 'Medium';
+                    strengthText.style.color = '#f59e0b';
+                    break;
+                case 4:
+                    strengthMeter.firstElementChild.style.width = '75%';
+                    strengthMeter.firstElementChild.style.backgroundColor = '#84cc16'; // lime
+                    strengthText.textContent = 'Good';
+                    strengthText.style.color = '#84cc16';
+                    break;
+                case 5:
+                    strengthMeter.firstElementChild.style.width = '100%';
+                    strengthMeter.firstElementChild.style.backgroundColor = '#10b981'; // green
+                    strengthText.textContent = 'Strong';
+                    strengthText.style.color = '#10b981';
+                    break;
+                default:
+                    strengthMeter.firstElementChild.style.width = '0%';
+                    strengthText.textContent = '';
+            }
+        });
+    }
+
+    
+    // --- Calendar ---
+    eventForm?.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const formData = new FormData(eventForm);
+        const payload = Object.fromEntries(formData.entries());
+        await fetchData('/events', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        toggleModal(eventModal, false);
+    });
+
+    document.getElementById('deleteEventBtn')?.addEventListener('click', () => {
+        toggleModal(eventDetailsModal, false);
+        toggleModal(confirmDeleteEventModal, true);
+    });
+
+    document.getElementById('cancelDeleteEventBtn')?.addEventListener('click', () => {
+        toggleModal(confirmDeleteEventModal, false);
+    });
+
+    document.getElementById('confirmDeleteEventBtn')?.addEventListener('click', async () => {
+        if (!eventToDeleteId) return;
+        try {
+            await fetchData(`/events/${eventToDeleteId}`, { method: 'DELETE' });
+            toggleModal(confirmDeleteEventModal, false);
+            eventToDeleteId = null;
+        } catch (error) {
+            alert('Failed to delete event.');
+        }
+    });
+
+    document.getElementById('cancelEventModalBtn')?.addEventListener('click', () => toggleModal(eventModal, false));
+    document.getElementById('closeEventDetailsBtn')?.addEventListener('click', () => toggleModal(eventDetailsModal, false));
+    
+    // ===============================================
+    // SECTION: Initial Load & Socket Listeners
+    // ===============================================
+    
+    function initialLoad() {
+        fetchDashboardStats();
+        fetchAppointments();
+        loadProducts();
+        loadStaff();
+        initializeCalendar();
+        // Don't fetch analytics by default, only when tab is clicked
+        // fetchAnalyticsData();
+    }
+    
+    // Announce online status to server
+    socket.emit('staff_online', user.id);
+
+    socket.on('appointment_update', () => { console.log('appointment_update received'); fetchAppointments(); fetchDashboardStats(); });
+    socket.on('analytics_update', () => { 
+        console.log('analytics_update received');
+        // Only refetch analytics if the tab is currently active
+        if (document.getElementById('analytics')?.classList.contains('active')) {
+            fetchAnalyticsData();
+        }
+    });
+    socket.on('products_update', () => { console.log('products_update received'); loadProducts(); });
+    socket.on('staff_update', () => { console.log('staff_update received'); loadStaff(); });
+    socket.on('events_update', () => { console.log('events_update received'); loadCalendarEvents(); });
+    socket.on('online_staff_update', (onlineIds) => {
+        onlineStaffIds = onlineIds;
+        // Find all staff rows and update their status indicator without a full reload
+        const staffRows = document.querySelectorAll('#staffTable tbody tr');
+        staffRows.forEach(row => {
+            const staffId = row.dataset.staffId;
+            const indicator = row.querySelector('.status-indicator');
+            if (staffId && indicator) {
+                const isOnline = onlineStaffIds.includes(parseInt(staffId, 10));
+                indicator.classList.toggle('online', isOnline);
+                indicator.classList.toggle('offline', !isOnline);
+                indicator.title = isOnline ? 'Online' : 'Offline';
+            }
+        });
+    });
+
+    initialLoad();
+});

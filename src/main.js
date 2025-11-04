@@ -8,6 +8,7 @@ function createWindow() {
     const win = new BrowserWindow({
         width: 1000,
         height: 600,
+        icon: path.join(__dirname, 'src/assets/images/PawLogo.png'),
         webPreferences: {
             contextIsolation: true,
             enableRemoteModule: false,
@@ -19,20 +20,26 @@ function createWindow() {
     Menu.setApplicationMenu(null);
 
     // Corrected the path to load login.html from within the src directory
-    win.loadFile(path.join(__dirname, 'html/login.html'));
+    win.loadFile(path.join(__dirname, '/html/login.html'));
     
-    // para sa devtools
-    // win.webContents.openDevTools();
-    // Listen for F12 to toggle DevTools manually
-    // win.webContents.on('before-input-event', (event, input) => {
-    //     if (input.key === 'F12' && input.type === 'keyDown') {
-    //         if (win.webContents.isDevToolsOpened()) {
-    //             win.webContents.closeDevTools();
-    //         } else {
-    //             win.webContents.openDevTools();
-    //         }
-    //     }
-    // });
+    // Listen for keyboard shortcuts
+    win.webContents.on('before-input-event', (event, input) => {
+        // F5 or Ctrl+R to reload the window
+        if (input.key === 'F5' || (input.control && input.key.toLowerCase() === 'r')) {
+            win.reload();
+            event.preventDefault();
+        }
+
+        // F12 to toggle DevTools
+        if (input.key === 'F12' && input.type === 'keyDown') {
+            if (win.webContents.isDevToolsOpened()) {
+                win.webContents.closeDevTools();
+            } else {
+                win.webContents.openDevTools();
+            }
+            event.preventDefault();
+        }
+    });
 }
 
 app.whenReady().then(createWindow);

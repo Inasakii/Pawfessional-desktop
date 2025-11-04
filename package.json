@@ -1,9 +1,9 @@
 {
-  "name": "desktopapp",
-  "productName": "desktopapp",
-  "version": "1.0.0",
+  "name": "pawapp",
+  "productName": "paw-app",
+  "version": "11.8.0",
   "description": "My Electron application description",
-  "main": "src/main.js",
+  "main": "main.js",
   "scripts": {
     "start": "electron-forge start",
     "package": "electron-forge package",
@@ -12,19 +12,24 @@
     "lint": "echo \"No linting configured\""
   },
   "keywords": [],
-  "author": {
-    "name": "Ken Palma",
-    "email": "palmakenlegarde@gmail.com"
-  },
+  "author": "Ken Palma <palmakenlegarde@gmail.com>",
   "license": "MIT",
   "dependencies": {
     "@fullcalendar/core": "^6.1.19",
     "@fullcalendar/daygrid": "^6.1.19",
     "@fullcalendar/timegrid": "^6.1.19",
+    "bcryptjs": "^2.4.3",
+    "cloudinary": "^2.2.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
     "electron-squirrel-startup": "^1.0.1",
+    "express": "^4.19.2",
     "express-session": "^1.18.2",
-    "multer": "^2.0.2",
-    "mysql": "^2.18.1"
+    "multer": "^1.4.5-lts.1",
+    "multer-storage-cloudinary": "^4.0.0",
+    "mysql2": "^3.10.1",
+    "nodemailer": "^6.9.14",
+    "socket.io": "^4.7.5"
   },
   "devDependencies": {
     "@electron-forge/cli": "^7.8.3",
@@ -37,6 +42,14 @@
     "@electron/fuses": "^1.8.0",
     "electron": "^38.2.1",
     "tailwindcss": "^4.1.12"
-  }
-  
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Inasakii/Pawfessional-desktop.git"
+  },
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/Inasakii/Pawfessional-desktop/issues"
+  },
+  "homepage": "https://github.com/Inasakii/Pawfessional-desktop#readme"
 }

@@ -73,7 +73,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const todaysBookedEl = document.getElementById('todaysBooked');
     const todaysApprovedEl = document.getElementById('todaysApproved');
     const todaysCompletedEl = document.getElementById('todaysCompleted');
-    const todaysCancelledEl = document.getElementById('todaysCancelled');
     const analyticsRecordsTableBody = document.getElementById('analyticsRecordsTableBody');
     const recentCancellationsTableBody = document.getElementById('recentCancellationsTableBody');
     let monthlyProductivityChart = null;
@@ -214,6 +213,55 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (e) { /* ignore */ }
     };
 
+    const loadHolidays = async () => {
+        if (!calendar) return;
+        const holidaysListEl = document.getElementById('holidaysList');
+
+        try {
+            const holidays = await fetchData('/holidays');
+            
+            // Add holidays to calendar as background events
+            calendar.addEventSource(
+                holidays.map(holiday => ({
+                    title: holiday.title,
+                    start: holiday.start,
+                    allDay: true,
+                    display: 'background',
+                    backgroundColor: '#FFFBEB', // A light yellow background
+                    borderColor: '#FBBF24' // A darker yellow border if needed
+                }))
+            );
+
+            // Populate the holiday list sidebar
+            const today = new Date();
+            today.setHours(0, 0, 0, 0); // Normalize to start of day
+
+            const upcomingHolidays = holidays
+                .filter(h => new Date(h.start) >= today)
+                .sort((a, b) => new Date(a.start) - new Date(b.start));
+
+            if (holidaysListEl) {
+                if (upcomingHolidays.length === 0) {
+                    holidaysListEl.innerHTML = `<li class="no-data-message">No upcoming holidays for the rest of the year.</li>`;
+                } else {
+                    holidaysListEl.innerHTML = upcomingHolidays.map(h => `
+                        <li class="holiday-item">
+                            <span class="holiday-name">${h.title}</span>
+                            <span class="holiday-date">${new Date(h.start + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                        </li>
+                    `).join('');
+                }
+            }
+
+        } catch (e) {
+            console.error("Failed to load holidays:", e);
+            if (holidaysListEl) {
+                holidaysListEl.innerHTML = `<li class="no-data-message">Could not load holidays.</li>`;
+            }
+        }
+    };
+
+
     // ===============================================
     // SECTION: UI Rendering & Initialization
     // ===============================================
@@ -222,13 +270,12 @@ document.addEventListener('DOMContentLoaded', () => {
         if(todaysBookedEl) todaysBookedEl.textContent = stats.total_booked || '0';
         if(todaysApprovedEl) todaysApprovedEl.textContent = stats.approved || '0';
         if(todaysCompletedEl) todaysCompletedEl.textContent = stats.completed || '0';
-        if(todaysCancelledEl) todaysCancelledEl.textContent = stats.cancelled || '0';
     }
 
     function renderAnalyticsRecords(records) {
         if (!analyticsRecordsTableBody) return;
         analyticsRecordsTableBody.innerHTML = records.length === 0 
-            ? `<tr><td colspan="6" class="no-data-message">No historical records found.</td></tr>`
+            ? `<tr><td colspan="5" class="no-data-message">No historical records found.</td></tr>`
             : records.map(record => `
                 <tr>
                     <td>${new Date(record.record_date).toLocaleDateString()}</td>
@@ -548,7 +595,7 @@ document.addEventListener('DOMContentLoaded', () => {
             return `
             <div class="product-card" data-id="${product.id}">
                 <div class="img-prod-box">
-                    <img src="${product.image ? `${SERVER_URL_ROOT}${product.image}` : 'https://placehold.co/300x200/EEE/31343C?text=No+Image'}" 
+                    <img src="${product.image || 'https://placehold.co/300x200/EEE/31343C?text=No+Image'}" 
                          alt="${product.pname}" 
                          class="product-image"
                          onerror="this.onerror=null; this.src='https://placehold.co/300x200/EEE/31343C?text=Image+Not+Found';"/>
@@ -657,6 +704,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         calendar.render();
         loadCalendarEvents();
+        loadHolidays();
     }
     
     // ===============================================
@@ -1174,18 +1222,8 @@ function formatForDatetimeLocal(date) {
     discountInput?.addEventListener('input', updateDiscountDisplay);
     stockInput?.addEventListener('input', updateStockDisplay);
 
-
-    // --- Staff ---
-    signupForm?.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const formData = new FormData(signupForm);
-        const payload = Object.fromEntries(formData.entries());
-        await fetchData('/staff', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-        toggleModal(successModal, true);
-        setTimeout(() => toggleModal(successModal, false), 2000);
-        signupForm.reset();
-    });
-
+    
+    // --- Staff Delete ---
     staffTableBody?.addEventListener('click', e => {
         const button = e.target.closest('button.delete');
         if (button) {
@@ -1207,103 +1245,200 @@ function formatForDatetimeLocal(date) {
     // ===============================================
     // SECTION: Team Management Form Enhancements
     // ===============================================
+
+    // Get all form elements
     const staffFnameInput = document.getElementById('staffFname');
     const staffLnameInput = document.getElementById('staffLname');
+    const staffMiInput = document.getElementById('staffMi');
+    const staffEmailInput = document.getElementById('staffEmail');
     const phoneInput = document.getElementById('phoneNumber');
+    const staffRoleInput = document.getElementById('staffRole');
+    const addressInput = document.getElementById('address');
+    const staffUserInput = document.getElementById('staffUser');
     const passwordInput = document.getElementById('staffPass');
+    const confirmPassInput = document.getElementById('confirmPass');
     const togglePassword = document.getElementById('togglePassword');
     const strengthMeter = document.getElementById('strengthMeter');
     const strengthText = document.getElementById('strengthText');
     const passwordStrengthIndicator = document.getElementById('passwordStrengthIndicator');
 
-    // Auto-capitalize first letter
-    const capitalizeInput = (e) => {
-        const input = e.target;
-        if (input.value.length > 0) {
-            input.value = input.value.charAt(0).toUpperCase() + input.value.slice(1);
+    // --- Validation Helper Functions ---
+    const showError = (inputEl, message) => {
+        const inputGroup = inputEl.closest('.input-group');
+        inputGroup.classList.add('error');
+        const errorEl = inputGroup.querySelector('.error-message');
+        if (errorEl) {
+            errorEl.textContent = message;
+            errorEl.style.display = 'block';
         }
     };
-    if (staffFnameInput) staffFnameInput.addEventListener('input', capitalizeInput);
-    if (staffLnameInput) staffLnameInput.addEventListener('input', capitalizeInput);
 
-    // Numeric only for phone number
+    const hideError = (inputEl) => {
+        const inputGroup = inputEl.closest('.input-group');
+        inputGroup.classList.remove('error');
+        const errorEl = inputGroup.querySelector('.error-message');
+        if (errorEl) {
+            errorEl.style.display = 'none';
+        }
+    };
+
+    // --- Password Strength Logic ---
+    const checkPasswordStrength = (pass) => {
+        let score = 0;
+        const hasLength = pass.length >= 8;
+        const hasLowercase = /[a-z]/.test(pass);
+        const hasUppercase = /[A-Z]/.test(pass);
+        const hasNumber = /[0-9]/.test(pass);
+        const hasSpecial = /[^a-zA-Z0-9]/.test(pass);
+
+        if (hasLength) score++;
+        if (hasLowercase && hasUppercase) score++;
+        if (hasNumber) score++;
+        if (hasSpecial) score++;
+        if (pass.length > 12) score++;
+        
+        return { score, allMet: hasLength && hasLowercase && hasUppercase && hasNumber }; // Simplified requirement for 'allMet'
+    };
+
+    const updatePasswordStrengthUI = (score) => {
+        const meterBar = document.querySelector('#strengthMeter .strength-meter-bar');
+        if (!meterBar) return;
+
+        switch (score) {
+            case 0: case 1:
+                meterBar.style.width = '20%';
+                meterBar.style.backgroundColor = '#ef4444'; // red
+                strengthText.textContent = 'Very Weak';
+                strengthText.style.color = '#ef4444';
+                break;
+            case 2:
+                meterBar.style.width = '40%';
+                meterBar.style.backgroundColor = '#f97316'; // orange
+                strengthText.textContent = 'Weak';
+                strengthText.style.color = '#f97316';
+                break;
+            case 3:
+                meterBar.style.width = '60%';
+                meterBar.style.backgroundColor = '#f59e0b'; // amber
+                strengthText.textContent = 'Medium';
+                strengthText.style.color = '#f59e0b';
+                break;
+            case 4:
+                meterBar.style.width = '80%';
+                meterBar.style.backgroundColor = '#84cc16'; // lime
+                strengthText.textContent = 'Good';
+                strengthText.style.color = '#84cc16';
+                break;
+            case 5:
+                meterBar.style.width = '100%';
+                meterBar.style.backgroundColor = '#10b981'; // green
+                strengthText.textContent = 'Strong';
+                strengthText.style.color = '#10b981';
+                break;
+            default:
+                meterBar.style.width = '0%';
+                strengthText.textContent = '';
+        }
+    };
+    
+    const validateSignupForm = () => {
+        let isValid = true;
+        
+        if (staffFnameInput.value.trim() === '') { showError(staffFnameInput, 'First name is required.'); isValid = false; } else { hideError(staffFnameInput); }
+        if (staffLnameInput.value.trim() === '') { showError(staffLnameInput, 'Last name is required.'); isValid = false; } else { hideError(staffLnameInput); }
+
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (staffEmailInput.value.trim() === '' || !emailRegex.test(staffEmailInput.value.trim())) { showError(staffEmailInput, 'Please enter a valid email.'); isValid = false; } else { hideError(staffEmailInput); }
+        
+        if (phoneInput.value.trim().length < 10) { showError(phoneInput, 'Please enter a valid 10-digit number.'); isValid = false; } else { hideError(phoneInput); }
+        if (staffRoleInput.value === '') { showError(staffRoleInput, 'Please select a role.'); isValid = false; } else { hideError(staffRoleInput); }
+        if (staffUserInput.value.trim().length < 4) { showError(staffUserInput, 'Username must be at least 4 characters.'); isValid = false; } else { hideError(staffUserInput); }
+
+        const { allMet } = checkPasswordStrength(passwordInput.value);
+        if (!allMet) { showError(passwordInput, 'Password must be 8+ characters with uppercase, lowercase, and a number.'); isValid = false; } else { hideError(passwordInput); }
+        if (confirmPassInput.value !== passwordInput.value) { showError(confirmPassInput, 'Passwords do not match.'); isValid = false; } else { hideError(confirmPassInput); }
+        
+        return isValid;
+    };
+
+    // --- Event Listeners ---
+    passwordInput?.addEventListener('input', () => {
+        const pass = passwordInput.value;
+        if (pass.length === 0) {
+            passwordStrengthIndicator.style.display = 'none';
+        } else {
+            passwordStrengthIndicator.style.display = 'block';
+            const { score } = checkPasswordStrength(pass);
+            updatePasswordStrengthUI(score);
+        }
+        if (confirmPassInput.value.length > 0) {
+            if (confirmPassInput.value !== pass) showError(confirmPassInput, 'Passwords do not match.');
+            else hideError(confirmPassInput);
+        }
+    });
+
+    confirmPassInput?.addEventListener('input', () => {
+        if (confirmPassInput.value !== passwordInput.value) showError(confirmPassInput, 'Passwords do not match.');
+        else hideError(confirmPassInput);
+    });
+
+    const capitalizeWords = (str) => str ? str.replace(/\b\w/g, char => char.toUpperCase()) : '';
+    const capitalizeInputHandler = e => {
+        const input = e.target;
+        const pos = input.selectionStart;
+        input.value = capitalizeWords(input.value);
+        input.setSelectionRange(pos, pos);
+    };
+
+    [staffFnameInput, staffLnameInput, staffMiInput, addressInput].forEach(input => {
+        if(input) input.addEventListener('input', capitalizeInputHandler);
+    });
+
     if (phoneInput) {
-        phoneInput.addEventListener('input', (e) => {
-            e.target.value = e.target.value.replace(/[^0-9]/g, '');
-        });
+        phoneInput.addEventListener('input', (e) => e.target.value = e.target.value.replace(/[^0-9]/g, ''));
     }
 
-    // Password visibility toggle
     if (togglePassword && passwordInput) {
         togglePassword.addEventListener('click', () => {
             const type = passwordInput.getAttribute('type') === 'password' ? 'text' : 'password';
             passwordInput.setAttribute('type', type);
-            // Toggle icon
-            const icon = togglePassword.querySelector('i');
-            icon.classList.toggle('fa-eye');
-            icon.classList.toggle('fa-eye-slash');
+            togglePassword.querySelector('i').classList.toggle('fa-eye-slash');
         });
     }
 
-    // Password strength meter
-    if (passwordInput && passwordStrengthIndicator && strengthMeter && strengthText) {
-        passwordInput.addEventListener('input', () => {
-            const pass = passwordInput.value;
-            let score = 0;
-            if (pass.length >= 8) score++;
-            if (pass.match(/[a-z]/)) score++;
-            if (pass.match(/[A-Z]/)) score++;
-            if (pass.match(/[0-9]/)) score++;
-            if (pass.match(/[^a-zA-Z0-9]/)) score++;
+    signupForm?.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        if (!validateSignupForm()) return;
 
-            if (pass.length === 0) {
-                 passwordStrengthIndicator.style.display = 'none';
-                 return;
-            }
-            passwordStrengthIndicator.style.display = 'block';
-            
-            const strengthMeterBar = strengthMeter.firstElementChild;
-            if (!strengthMeterBar) { // Create it if it doesn't exist
-                const bar = document.createElement('div');
-                strengthMeter.appendChild(bar);
-            }
+        const submitButton = signupForm.querySelector('button[type="submit"]');
+        const originalButtonHTML = submitButton.innerHTML;
+        submitButton.disabled = true;
+        submitButton.innerHTML = `<span class="loader"></span> Creating...`;
+        
+        const formData = new FormData(signupForm);
+        const payload = Object.fromEntries(formData.entries());
+        
+        try {
+            await fetchData('/staff', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+            toggleModal(successModal, true);
+            setTimeout(() => toggleModal(successModal, false), 2000);
+            signupForm.reset();
+        } catch (error) {
+            alert('Failed to create account. ' + error.message);
+        } finally {
+            submitButton.disabled = false;
+            submitButton.innerHTML = originalButtonHTML;
+        }
+    });
 
-            switch (score) {
-                case 0:
-                case 1:
-                case 2:
-                    strengthMeter.firstElementChild.style.width = '25%';
-                    strengthMeter.firstElementChild.style.backgroundColor = '#ef4444'; // red
-                    strengthText.textContent = 'Weak';
-                    strengthText.style.color = '#ef4444';
-                    break;
-                case 3:
-                    strengthMeter.firstElementChild.style.width = '50%';
-                    strengthMeter.firstElementChild.style.backgroundColor = '#f59e0b'; // orange
-                    strengthText.textContent = 'Medium';
-                    strengthText.style.color = '#f59e0b';
-                    break;
-                case 4:
-                    strengthMeter.firstElementChild.style.width = '75%';
-                    strengthMeter.firstElementChild.style.backgroundColor = '#84cc16'; // lime
-                    strengthText.textContent = 'Good';
-                    strengthText.style.color = '#84cc16';
-                    break;
-                case 5:
-                    strengthMeter.firstElementChild.style.width = '100%';
-                    strengthMeter.firstElementChild.style.backgroundColor = '#10b981'; // green
-                    strengthText.textContent = 'Strong';
-                    strengthText.style.color = '#10b981';
-                    break;
-                default:
-                    strengthMeter.firstElementChild.style.width = '0%';
-                    strengthText.textContent = '';
-            }
-        });
-    }
+    signupForm?.addEventListener('reset', () => {
+        signupForm.querySelectorAll('.input-group.error').forEach(g => g.classList.remove('error'));
+        passwordStrengthIndicator.style.display = 'none';
+    });
 
-    
-    // --- Calendar ---
+    // ===============================================
+    // SECTION: Calendar
+    // ===============================================
     eventForm?.addEventListener('submit', async (e) => {
         e.preventDefault();
         const formData = new FormData(eventForm);

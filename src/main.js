@@ -8,7 +8,7 @@ function createWindow() {
     const win = new BrowserWindow({
         width: 1000,
         height: 600,
-        icon: path.join(__dirname, 'src/assets/images/PawLogo.png'),
+        icon: path.join(__dirname, './assets/images/desktop-logo.png'),
         webPreferences: {
             contextIsolation: true,
             enableRemoteModule: false,
@@ -20,7 +20,7 @@ function createWindow() {
     Menu.setApplicationMenu(null);
 
     // Corrected the path to load login.html from within the src directory
-    win.loadFile(path.join(__dirname, '/html/login.html'));
+    win.loadFile(path.join(__dirname, '../src/html/login.html'));
     
     // Listen for keyboard shortcuts
     win.webContents.on('before-input-event', (event, input) => {

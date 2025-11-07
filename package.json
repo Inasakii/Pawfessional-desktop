@@ -1,9 +1,9 @@
 {
-  "name": "pawapp",
+  "name": "PawApp",
   "productName": "paw-app",
   "version": "11.8.0",
   "description": "My Electron application description",
-  "main": "main.js",
+  "main": "./src/main.js",
   "scripts": {
     "start": "electron-forge start",
     "package": "electron-forge package",

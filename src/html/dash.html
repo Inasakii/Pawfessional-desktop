@@ -80,7 +80,7 @@
                     </div>
                 </div>
             </div>
-            <div id="eventModal" class="modal" style="display:none;"><div class="modal-content"><h2 id="modalTitle">Add New Event</h2><form id="calendarEventForm"><div class="form-group"><label for="calendarEventTitle" style="color: #E9590F; font-weight: 400;">Service Type:</label><select id="calendarEventTitle" name="title" required><option value="">Select a service</option><option value="Free Check Up">Free Check Up</option><option value="Vaccination">Vaccination</option><option value="Routine Exam">Routine Exam</option><option value="Dental Cleaning">Dental Cleaning</option><option value="Surgery">Surgery</option><option value="Emergency Treatment">Emergency Treatment</option><option value="Spay/Neuter">Spay/Neuter</option></select></div><div class="form-group"><label for="calendarEventStart">Start Time:</label><input type="datetime-local" id="calendarEventStart" name="start" required></div><div class="form-group"><label for="calendarEventEnd">End Time:</label><input type="datetime-local" id="calendarEventEnd" name="end" required></div><div class="form-group"><label for="calendarEventPet">Pet Type:</label><input type="text" id="calendarEventPet" name="pet" placeholder="e.g., Dog - Golden Retriever"></div><div class="form-group"><label for="calendarEventNotes">Notes:</label><textarea id="calendarEventNotes" name="notes" rows="3" placeholder="Additional details..."></textarea></div><input type="hidden" id="calendarEventCreatedBy" name="created_by" value=""><div class="modal-buttons"><button type="button" class="btn btn-secondary" id="cancelEventModalBtn">Cancel</button><button type="submit" class="btn btn-primary">Save Event</button></div></form></div></div>
+            <div id="eventModal" class="modal" style="display:none;"><div class="modal-content"><h2 id="modalTitle">Add New Event</h2><form id="calendarEventForm"><div class="form-group"><label for="calendarEventTitle" style="color: #E9590F; font-weight: 400;">Service Type:</label><select id="calendarEventTitle" name="title" required><option value="">Select a service</option><option value="Free Check Up">Free Check Up</option><option value="Vaccination">Vaccination</option><option value="Routine Exam">Routine Exam</option><option value="Dental Cleaning">Dental Cleaning</option><option value="Surgery">Surgery</option><option value="Emergency Treatment">Emergency Treatment</option><option value="Spay/Neuter">Spay/Neuter</option><option value="Retail Only">Retail Only</option><option value="Clinic Closed">Clinic Closed</option></select></div><div class="form-group"><label for="calendarEventStart">Start Time:</label><input type="datetime-local" id="calendarEventStart" name="start" required></div><div class="form-group"><label for="calendarEventEnd">End Time:</label><input type="datetime-local" id="calendarEventEnd" name="end" required></div><div class="form-group"><label for="calendarEventPet">Pet Type:</label><input type="text" id="calendarEventPet" name="pet" placeholder="e.g., Dog - Golden Retriever"></div><div class="form-group"><label for="calendarEventNotes">Notes:</label><textarea id="calendarEventNotes" name="notes" rows="3" placeholder="Additional details..."></textarea></div><input type="hidden" id="calendarEventCreatedBy" name="created_by" value=""><div class="modal-buttons"><button type="button" class="btn btn-secondary" id="cancelEventModalBtn">Cancel</button><button type="submit" class="btn btn-primary">Save Event</button></div></form></div></div>
             <div id="eventDetails" class="modal" style="display:none;"><div class="modal-content"><div id="eventInfo"></div><div class="modal-buttons" style="margin-top:20px;"><button class="modal-btn confirm-danger" id="deleteEventBtn">Delete Event</button><button class="modal-btn" id="closeEventDetailsBtn">Close</button></div></div></div>
              <div id="confirmDeleteEventModal" class="modal">
                  <div class="modal-content modal-confirm">
@@ -395,7 +395,7 @@
                         <div id="calendar"></div>
                     </div>
                     <div class="calendar-sidebar card">
-                        <h3 class="sidebar-title"><i class="fas fa-flag"></i> Upcoming Holidays</h3>
+                        <h3 class="sidebar-title"><i class="fas fa-calendar-alt"></i> Holidays This Month</h3>
                         <ul id="holidaysList" class="holidays-list">
                             <li class="no-data-message">Loading holidays...</li>
                         </ul>
@@ -445,18 +445,65 @@
                             <h2 style="margin-bottom:20px" id="productFormTitle">Add New Product</h2>
                             <form id="productForm" enctype="multipart/form-data">
                                 <input type="hidden" id="productId" name="id">
-                                <fieldset><legend>General Information</legend><div class="form-row"><div class="form-group"><label for="pname">Product Name</label><input type="text" id="pname" name="pname" required placeholder="e.g., Puppy Dog Food"></div><div class="form-group"><label for="brand">Brand</label><input list="brandSuggestions" id="brand" name="brand" placeholder="e.g., Royal Canin">
-                                    <datalist id="brandSuggestions">
-                                        <option value="Royal Canin"></option>
-                                        <option value="Pedigree"></option>
-                                        <option value="Whiskas"></option>
-                                        <option value="Friskies"></option>
-                                        <option value="Special Delight"></option>
-                                        <option value="Papi"></option>
-                                        <option value="Cosi"></option>
-                                        <option value="Vitality"></option>
-                                    </datalist>
-                                </div><div class="form-group"><label for="category">Category</label><select id="category" name="category" required><option value="">Select category</option><option value="Food">Food</option><option value="Vitamins">Vitamins</option><option value="Milk">Milk</option><option value="Shampoo">Shampoo</option><option value="Soap">Soap</option><option value="Disinfectant">Disinfectant</option><option value="Supplement">Supplement</option><option value="Others">Others</option></select></div><div class="form-group"><label for="life_stage">Life Stage</label><select id="life_stage" name="life_stage"><option value="All">All</option><option value="Puppy">Puppy</option><option value="Adult">Adult</option><option value="Senior">Senior</option><option value="Kitten">Kitten</option></select></div></div><div class="form-row"><div class="form-group"><label for="price">Price (₱)</label><input type="number" id="price" name="price" step="0.01" placeholder="0.00"></div><div class="form-group"><label for="petType">Pet Type</label><select id="petType" name="petType"><option value="">Select pet type</option><option value="Dog">Dog</option><option value="Cat">Cat</option><option value="Dog and Cat">Dog and Cat</option></select></div></div><div class="form-row"><div class="form-group"><label for="disc">Discount (%)</label><input type="number" id="disc" name="disc" placeholder="e.g., 10"></div><div class="form-group"><label for="disc_disp">Discount Price (₱)</label><input type="number" id="disc_disp" name="disc_disp" readonly></div></div><div class="form-group"><label for="description">Description</label><textarea id="description" name="description" placeholder="Enter a brief description of the product..."></textarea></div><div class="form-group"><label for="image">Upload Image</label><input type="file" id="image" name="image" accept="image/*"></div></fieldset><fieldset><legend>Manage Stock</legend><div class="form-row"><div class="form-group"><label for="stock">Stock Quantity</label><input type="number" id="stock" name="stock" placeholder="e.g., 100"></div><div class="form-group"><label for="stock_disp">Display Stock</label><input type="text" id="stock_disp" name="stock_disp" readonly></div></div></fieldset>
+                                <div class="form-section">
+                                    <h3 class="form-section-title">General Information</h3>
+                                    <div class="form-row">
+                                        <div class="form-group"><label for="pname">Product Name</label><input type="text" id="pname" name="pname" required placeholder="e.g., Puppy Dog Food"></div>
+                                        <div class="form-group">
+                                            <label for="brand">Brand</label><input list="brandSuggestions" id="brand" name="brand" placeholder="e.g., Royal Canin">
+                                            <datalist id="brandSuggestions">
+                                                <option value="Royal Canin"></option>
+                                                <option value="Pedigree"></option>
+                                                <option value="Whiskas"></option>
+                                                <option value="Friskies"></option>
+                                                <option value="Special Delight"></option>
+                                                <option value="Papi"></option>
+                                                <option value="Cosi"></option>
+                                                <option value="Vitality"></option>
+                                            </datalist>
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="category">Category</label>
+                                            <select id="category" name="category" required>
+                                                <option value="">Select category</option>
+                                                <option value="Food">Food</option>
+                                                <option value="Vitamins">Vitamins</option>
+                                                <option value="Milk">Milk</option>
+                                                <option value="Shampoo">Shampoo</option>
+                                                <option value="Soap">Soap</option>
+                                                <option value="Disinfectant">Disinfectant</option>
+                                                <option value="Supplement">Supplement</option>
+                                                <option value="Others">Others</option>
+                                            </select>
+                                        </div>
+                                        <div class="form-group"><label for="life_stage">Life Stage</label><select id="life_stage" name="life_stage"><option value="All">All</option><option value="Puppy">Puppy</option><option value="Adult">Adult</option><option value="Senior">Senior</option><option value="Kitten">Kitten</option></select></div>
+                                    </div>
+                                    <div class="form-row">
+                                        <div class="form-group"><label for="price">Price (₱)</label><input type="number" id="price" name="price" step="0.01" placeholder="0.00"></div>
+                                        <div class="form-group">
+                                            <label for="petType">Pet Type</label>
+                                            <select id="petType" name="petType">
+                                                <option value="">Select pet type</option>
+                                                <option value="Dog">Dog</option>
+                                                <option value="Cat">Cat</option>
+                                                <option value="Dog and Cat">Dog and Cat</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="form-row">
+                                        <div class="form-group"><label for="disc">Discount (%)</label><input type="number" id="disc" name="disc" placeholder="e.g., 10"></div>
+                                        <div class="form-group"><label for="disc_disp">Discount Price (₱)</label><input type="number" id="disc_disp" name="disc_disp" readonly></div>
+                                    </div>
+                                    <div class="form-group"><label for="description">Description</label><textarea id="description" name="description" placeholder="Enter a brief description of the product..."></textarea></div>
+                                    <div class="form-group"><label for="image">Upload Image</label><input type="file" id="image" name="image" accept="image/*"></div>
+                                </div>
+                                <div class="form-section">
+                                    <h3 class="form-section-title">Manage Stock</h3>
+                                    <div class="form-row">
+                                        <div class="form-group"><label for="stock">Stock Quantity</label><input type="number" id="stock" name="stock" placeholder="e.g., 100"></div>
+                                        <div class="form-group"><label for="stock_disp">Display Stock</label><input type="text" id="stock_disp" name="stock_disp" readonly></div>
+                                    </div>
+                                </div>
                                 <div class="form-actions">
                                     <button type="button" class="btn btn-secondary" id="cancelBtn">Cancel</button>
                                     <button type="submit" class="btn btn-primary" id="productSubmitBtn">Save Product</button>

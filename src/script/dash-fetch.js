@@ -88,6 +88,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Products ---
     let selectedProductIds = [];
+    let allProducts = []; // To store the master list of products
     const productsGrid = document.getElementById("productsGrid");
     const addProductBtn = document.getElementById("addProductBtn");
     const editProductBtn = document.getElementById("editProductBtn");
@@ -102,6 +103,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const discountDisplayInput = document.getElementById('disc_disp');
     const stockInput = document.getElementById('stock');
     const stockDisplayInput = document.getElementById('stock_disp');
+    const productSearchInput = document.querySelector('#product #searchInput');
+    const productSearchBtn = document.querySelector('#product #searchBtn');
+    const productFilterBtns = document.querySelectorAll('#product .filters .filter-btn');
+
 
     // --- Team / Staff ---
     let staffToDelete = null;
@@ -113,6 +118,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Calendar ---
     let calendar = null;
+    let allHolidays = []; // To store the master list of holidays
     let eventToDeleteId = null;
     const calendarEl = document.getElementById("calendar");
     const eventForm = document.getElementById("calendarEventForm");
@@ -143,6 +149,33 @@ document.addEventListener('DOMContentLoaded', () => {
             throw error;
         }
     }
+
+    // New dedicated function for handling file uploads with FormData.
+    async function fetchWithFormData(endpoint, method, formData) {
+        try {
+            const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+                method: method,
+                body: formData,
+                // DO NOT explicitly set 'Content-Type' header here.
+                // The browser will automatically set it to 'multipart/form-data'
+                // with the correct boundary when the body is a FormData object.
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({ message: `HTTP Error: ${response.status}` }));
+                throw new Error(errorData.message || `Request failed`);
+            }
+
+            if (response.status === 204) {
+                return { success: true };
+            }
+            return response.json();
+        } catch (error) {
+            console.error(`Error with FormData fetch to ${endpoint}:`, error);
+            throw error;
+        }
+    }
+
 
     const fetchDashboardStats = async () => {
         try {
@@ -189,8 +222,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const loadProducts = async () => {
         try {
             const products = await fetchData('/products');
-            displayProducts(products);
-        } catch (e) { /* ignore */ }
+            allProducts = products; // Store the master list
+            filterAndRenderProducts(); // Initial render with filters
+        } catch (e) { 
+             if(productsGrid) productsGrid.innerHTML = `<p class="no-data-message">Error loading products.</p>`;
+        }
     };
 
     const loadStaff = async () => {
@@ -208,60 +244,62 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!calendar) return;
         try {
             const events = await fetchData('/events');
-            calendar.getEventSources().forEach(src => src.remove());
-            calendar.addEventSource(events.map(ev => ({...ev, backgroundColor: getEventColor(ev.title), borderColor: getEventColor(ev.title)})));
-        } catch (e) { /* ignore */ }
+            
+            // Remove only the specific source for regular events before re-adding it
+            const existingEventSource = calendar.getEventSourceById('regular-events');
+            if (existingEventSource) {
+                existingEventSource.remove();
+            }
+
+            calendar.addEventSource({
+                id: 'regular-events', // Assign a unique ID to this event source
+                events: events.map(ev => ({
+                    ...ev, 
+                    backgroundColor: getEventColor(ev.title), 
+                    borderColor: getEventColor(ev.title)
+                }))
+            });
+
+        } catch (e) { 
+            console.error("Failed to load calendar events:", e);
+        }
     };
 
     const loadHolidays = async () => {
         if (!calendar) return;
-        const holidaysListEl = document.getElementById('holidaysList');
-
         try {
             const holidays = await fetchData('/holidays');
+            allHolidays = holidays;
             
-            // Add holidays to calendar as background events
-            calendar.addEventSource(
-                holidays.map(holiday => ({
+            // Remove the old holiday source before adding the new one to prevent duplication
+            const existingHolidaySource = calendar.getEventSourceById('holiday-events');
+            if (existingHolidaySource) {
+                existingHolidaySource.remove();
+            }
+
+            // Add holidays to calendar as styled events with a unique source ID
+            calendar.addEventSource({
+                id: 'holiday-events',
+                events: holidays.map(holiday => ({
                     title: holiday.title,
                     start: holiday.start,
                     allDay: true,
-                    display: 'background',
-                    backgroundColor: '#FFFBEB', // A light yellow background
-                    borderColor: '#FBBF24' // A darker yellow border if needed
+                    className: 'fc-event-holiday' // Apply our custom class
                 }))
-            );
+            });
 
-            // Populate the holiday list sidebar
-            const today = new Date();
-            today.setHours(0, 0, 0, 0); // Normalize to start of day
-
-            const upcomingHolidays = holidays
-                .filter(h => new Date(h.start) >= today)
-                .sort((a, b) => new Date(a.start) - new Date(b.start));
-
-            if (holidaysListEl) {
-                if (upcomingHolidays.length === 0) {
-                    holidaysListEl.innerHTML = `<li class="no-data-message">No upcoming holidays for the rest of the year.</li>`;
-                } else {
-                    holidaysListEl.innerHTML = upcomingHolidays.map(h => `
-                        <li class="holiday-item">
-                            <span class="holiday-name">${h.title}</span>
-                            <span class="holiday-date">${new Date(h.start + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
-                        </li>
-                    `).join('');
-                }
-            }
+            // Initially render holidays for the current month
+            updateHolidaySidebar(new Date());
 
         } catch (e) {
             console.error("Failed to load holidays:", e);
+            const holidaysListEl = document.getElementById('holidaysList');
             if (holidaysListEl) {
                 holidaysListEl.innerHTML = `<li class="no-data-message">Could not load holidays.</li>`;
             }
         }
     };
-
-
+    
     // ===============================================
     // SECTION: UI Rendering & Initialization
     // ===============================================
@@ -574,11 +612,40 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    function filterAndRenderProducts() {
+        if (!productsGrid) return;
+    
+        const searchQuery = productSearchInput.value.toLowerCase().trim();
+        const activeFilterBtn = document.querySelector('#product .filters .filter-btn.active');
+        const petTypeFilter = activeFilterBtn ? activeFilterBtn.textContent.trim() : 'All';
+    
+        let filteredProducts = allProducts.filter(product => {
+            const matchesSearch = !searchQuery || 
+                                  product.pname.toLowerCase().includes(searchQuery) ||
+                                  (product.brand && product.brand.toLowerCase().includes(searchQuery));
+    
+            let matchesPetType = true;
+            if (petTypeFilter === 'Dogs') {
+                matchesPetType = product.petType === 'Dog' || product.petType === 'Dog and Cat';
+            } else if (petTypeFilter === 'Cats') {
+                matchesPetType = product.petType === 'Cat' || product.petType === 'Dog and Cat';
+            }
+    
+            return matchesSearch && matchesPetType;
+        });
+    
+        displayProducts(filteredProducts);
+    }
 
     function displayProducts(products) {
         if (!productsGrid) return;
-        if (totalProductsEl) totalProductsEl.textContent = products.length;
+        if (totalProductsEl) totalProductsEl.textContent = allProducts.length; // Show total count, not filtered
     
+        if (products.length === 0) {
+            productsGrid.innerHTML = `<p class="no-data-message">No products match the current filters.</p>`;
+            return;
+        }
+
         productsGrid.innerHTML = products.map(product => {
             const formattedDate = product.created_at ? new Date(product.created_at).toLocaleDateString('en-US') : 'N/A';
             const petTypeClass = product.petType ? product.petType.toLowerCase().replace(/\s+/g, '-') : 'general';
@@ -592,10 +659,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 `;
             }
 
+            // Since Cloudinary now provides a full, valid URL, we can use it directly.
+            const imageUrl = product.image || 'https://placehold.co/300x200/EEE/31343C?text=Image+Not+Found';
+
             return `
             <div class="product-card" data-id="${product.id}">
                 <div class="img-prod-box">
-                    <img src="${product.image || 'https://placehold.co/300x200/EEE/31343C?text=No+Image'}" 
+                    <img src="${imageUrl}" 
                          alt="${product.pname}" 
                          class="product-image"
                          onerror="this.onerror=null; this.src='https://placehold.co/300x200/EEE/31343C?text=Image+Not+Found';"/>
@@ -613,9 +683,9 @@ document.addEventListener('DOMContentLoaded', () => {
                         </div>
                         <div class="price">${priceHtml}</div>
                     </div>
-                    <div class="product-footer">
-                        <span class="product-date">Added: ${formattedDate}</span>
-                    </div>
+                </div>
+                 <div class="product-footer">
+                    <span class="product-date">Added: ${formattedDate}</span>
                 </div>
             </div>`;
         }).join('');
@@ -690,6 +760,32 @@ document.addEventListener('DOMContentLoaded', () => {
             }).join('');
     }
 
+    // New function to update the holiday sidebar for a given month
+    function updateHolidaySidebar(date) {
+        const holidaysListEl = document.getElementById('holidaysList');
+        if (!holidaysListEl || allHolidays.length === 0) return;
+
+        const currentMonth = date.getMonth();
+        const currentYear = date.getFullYear();
+
+        const holidaysForMonth = allHolidays
+            .filter(h => {
+                const holidayDate = new Date(h.start + 'T00:00:00');
+                return holidayDate.getMonth() === currentMonth && holidayDate.getFullYear() === currentYear;
+            })
+            .sort((a, b) => new Date(a.start) - new Date(b.start));
+
+        if (holidaysForMonth.length === 0) {
+            holidaysListEl.innerHTML = `<li class="no-data-message">No holidays this month.</li>`;
+        } else {
+            holidaysListEl.innerHTML = holidaysForMonth.map(h => `
+                <li class="holiday-item">
+                    <span class="holiday-name">${h.title}</span>
+                    <span class="holiday-date">${new Date(h.start + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                </li>
+            `).join('');
+        }
+    }
 
     function initializeCalendar() {
         if (!calendarEl) return;
@@ -701,6 +797,33 @@ document.addEventListener('DOMContentLoaded', () => {
             select: (info) => openEventModal(info.start, info.end),
             eventClick: (info) => showEventDetailsModal(info.event),
             height: "auto", aspectRatio: 1.8,
+            datesSet: function(dateInfo) {
+                updateHolidaySidebar(dateInfo.view.currentStart);
+            },
+            eventContent: function(arg) {
+                // Don't add icons to holiday events
+                if (arg.event.classNames.includes('fc-event-holiday')) {
+                    return {
+                        html: `<div class="fc-event-title">${arg.event.title}</div>`
+                    };
+                }
+
+                // For regular events, add an icon
+                const iconClass = getIconForEvent(arg.event.title);
+                const timeText = arg.timeText ? `<span class="fc-event-time">${arg.timeText}</span>` : '';
+
+                return {
+                    html: `
+                        <div class="fc-event-main-content">
+                            <i class="${iconClass} event-icon"></i>
+                            <div class="fc-event-title-container">
+                                ${timeText}
+                                <div class="fc-event-title">${arg.event.title}</div>
+                            </div>
+                        </div>
+                    `
+                };
+            }
         });
         calendar.render();
         loadCalendarEvents();
@@ -749,6 +872,9 @@ document.addEventListener('DOMContentLoaded', () => {
             endDate = new Date(startDate.getTime() + 60 * 60 * 1000); // 1-hour duration.
         }
         
+        // Manually trigger change event to reset fields to editable state
+        document.getElementById('calendarEventTitle').dispatchEvent(new Event('change'));
+
         eventForm.querySelector('#calendarEventStart').value = formatForDatetimeLocal(startDate);
         eventForm.querySelector('#calendarEventEnd').value = formatForDatetimeLocal(endDate);
         toggleModal(eventModal, true);
@@ -759,6 +885,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const deleteBtn = document.getElementById("deleteEventBtn");
         if (!infoEl || !deleteBtn) return;
         
+        // Prevent showing details for holiday background events
+        if (event.classNames.includes('fc-event-holiday')) {
+            return;
+        }
+
         eventToDeleteId = event.id;
 
         const start = event.start; // These are already Date objects from FullCalendar
@@ -821,10 +952,26 @@ function getEventColor(title) {
         "Surgery": "#dc3545",
         "Emergency Treatment": "#6f42c1",
         "Spay/Neuter": "#e83e8c",
-        "Retail Only Day": "#3b82f6",
+        "Retail Only": "#3b82f6",
         "Clinic Closed": "#64748b"
     };
     return colors[title] || "#4f46e5";
+}
+
+function getIconForEvent(title) {
+    const iconMap = {
+        "Free Check Up": "fa-stethoscope",
+        "Vaccination": "fa-syringe",
+        "Routine Exam": "fa-notes-medical",
+        "Dental Cleaning": "fa-tooth",
+        "Surgery": "fa-scalpel",
+        "Emergency Treatment": "fa-heart-pulse",
+        "Spay/Neuter": "fa-paw",
+        "Retail Only": "fa-shopping-bag",
+        "Clinic Closed": "fa-door-closed"
+    };
+    // Use a solid icon set prefix 'fas' for consistency
+    return `fas ${iconMap[title] || "fa-calendar-check"}`;
 }
 
 
@@ -1171,9 +1318,9 @@ function formatForDatetimeLocal(date) {
         
         try {
             if (productId) {
-                await fetchData(`/products/${productId}`, { method: "PATCH", body: formData });
+                await fetchWithFormData(`/products/${productId}`, "PATCH", formData);
             } else {
-                await fetchData('/add-product', { method: "POST", body: formData });
+                await fetchWithFormData('/add-product', "POST", formData);
             }
             addProductForm.style.display = "none";
             productForm.reset();
@@ -1181,7 +1328,7 @@ function formatForDatetimeLocal(date) {
             document.querySelectorAll('.product-card.selected').forEach(c => c.classList.remove('selected'));
             updateProductActionButtons();
         } catch (error) {
-            alert(`Failed to ${productId ? 'update' : 'add'} product.`);
+            alert(`Failed to ${productId ? 'update' : 'add'} product. Error: ${error.message}`);
         }
     });
 
@@ -1445,6 +1592,42 @@ function formatForDatetimeLocal(date) {
         const payload = Object.fromEntries(formData.entries());
         await fetchData('/events', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
         toggleModal(eventModal, false);
+    });
+
+    document.getElementById('calendarEventTitle')?.addEventListener('change', (e) => {
+        const serviceType = e.target.value;
+        const startInput = document.getElementById('calendarEventStart');
+        const endInput = document.getElementById('calendarEventEnd');
+        const petInput = document.getElementById('calendarEventPet');
+
+        if (!startInput || !endInput || !petInput) return;
+
+        if (serviceType === 'Clinic Closed') {
+            const datePart = startInput.value.split('T')[0];
+            
+            // Set to full day
+            startInput.value = `${datePart}T00:00`;
+            endInput.value = `${datePart}T23:59`;
+            
+            // Clear and disable pet input
+            petInput.value = '';
+
+            // Make inputs readonly to prevent editing but allow submission
+            startInput.readOnly = true;
+            endInput.readOnly = true;
+            petInput.readOnly = true;
+
+        } else {
+            // Re-enable inputs
+            startInput.readOnly = false;
+            endInput.readOnly = false;
+            petInput.readOnly = false;
+
+            // Restore default times for convenience if the user switches back
+            const datePart = startInput.value.split('T')[0] || new Date().toISOString().split('T')[0];
+            startInput.value = `${datePart}T08:00`;
+            endInput.value = `${datePart}T09:00`;
+        }
     });
 
     document.getElementById('deleteEventBtn')?.addEventListener('click', () => {

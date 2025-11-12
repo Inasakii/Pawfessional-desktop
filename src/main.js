@@ -30,15 +30,15 @@ function createWindow() {
             event.preventDefault();
         }
 
-        // F12 to toggle DevTools
-        if (input.key === 'F12' && input.type === 'keyDown') {
-            if (win.webContents.isDevToolsOpened()) {
-                win.webContents.closeDevTools();
-            } else {
-                win.webContents.openDevTools();
-            }
-            event.preventDefault();
-        }
+        // // F12 to toggle DevTools
+        // if (input.key === 'F12' && input.type === 'keyDown') {
+        //     if (win.webContents.isDevToolsOpened()) {
+        //         win.webContents.closeDevTools();
+        //     } else {
+        //         win.webContents.openDevTools();
+        //     }
+        //     event.preventDefault();
+        // }
     });
 }
 

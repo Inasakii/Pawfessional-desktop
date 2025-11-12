@@ -1,4 +1,79 @@
 document.addEventListener('DOMContentLoaded', () => {
+    // Define chart variables at the top to avoid ReferenceError on initial theme application
+    let monthlyProductivityChart = null;
+    let appointmentsPerDayChart = null;
+    let appointmentStatusPieChart = null;
+    let appointmentStatusChart = null;
+
+    // ===============================================
+    // SECTION: Theme Management (Dark Mode)
+    // ===============================================
+    const themeToggle = document.getElementById('theme-toggle');
+    
+    const applyTheme = (theme) => {
+        if (theme === 'dark') {
+            document.body.classList.add('dark-mode');
+            if(themeToggle) themeToggle.checked = true;
+        } else {
+            document.body.classList.remove('dark-mode');
+            if(themeToggle) themeToggle.checked = false;
+        }
+        // Update charts with new theme colors
+        updateAllChartThemes(theme);
+    };
+
+    const getChartThemeColors = (theme) => {
+        const isDark = theme === 'dark';
+        return {
+            ticksColor: isDark ? '#ccc' : '#666',
+            gridColor: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)',
+            legendColor: isDark ? '#eee' : '#666',
+            tooltipTitleColor: isDark ? '#fff' : '#000',
+            tooltipBodyColor: isDark ? '#ddd' : '#333',
+            tooltipBgColor: isDark ? 'rgba(0,0,0,0.8)' : 'rgba(255,255,255,0.9)',
+        };
+    };
+
+    const updateAllChartThemes = (theme) => {
+        const colors = getChartThemeColors(theme);
+        
+        // Set Chart.js global defaults
+        Chart.defaults.color = colors.legendColor;
+        
+        const charts = [monthlyProductivityChart, appointmentsPerDayChart, appointmentStatusPieChart, appointmentStatusChart];
+        charts.forEach(chart => {
+            if (chart) {
+                // Update scales for bar and line charts
+                if (chart.options.scales) {
+                    Object.values(chart.options.scales).forEach(scale => {
+                        if(scale.ticks) scale.ticks.color = colors.ticksColor;
+                        if(scale.grid) scale.grid.color = colors.gridColor;
+                    });
+                }
+                // Update legend and tooltips for all charts
+                if(chart.options.plugins.legend) chart.options.plugins.legend.labels.color = colors.legendColor;
+                if(chart.options.plugins.tooltip) {
+                    chart.options.plugins.tooltip.titleColor = colors.tooltipTitleColor;
+                    chart.options.plugins.tooltip.bodyColor = colors.tooltipBodyColor;
+                    chart.options.plugins.tooltip.backgroundColor = colors.tooltipBgColor;
+                }
+                chart.update();
+            }
+        });
+    };
+    
+    themeToggle?.addEventListener('change', () => {
+        const newTheme = themeToggle.checked ? 'dark' : 'light';
+        localStorage.setItem('theme', newTheme);
+        applyTheme(newTheme);
+    });
+
+    // Load saved theme on startup
+    const savedTheme = localStorage.getItem('theme');
+    const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    applyTheme(savedTheme || (prefersDark ? 'dark' : 'light'));
+
+
     // ===============================================
     // SECTION: Authentication & Initialization
     // ===============================================
@@ -15,12 +90,26 @@ document.addEventListener('DOMContentLoaded', () => {
     if (userAvatarEl) userAvatarEl.textContent = user.name ? user.name[0].toUpperCase() : 'U';
 
     // Role-Based Access Control
-    // Hide 'Team' nav item and content section if the user is a 'Staff'
-    if (user.role && user.role.toLowerCase() === 'staff') {
+    if (user.role) {
+        const userRole = user.role.toLowerCase();
         const teamNavItem = document.querySelector('.nav-item[data-target="team"]');
         const teamContentSection = document.getElementById('team');
-        if (teamNavItem) teamNavItem.style.display = 'none';
-        if (teamContentSection) teamContentSection.style.display = 'none';
+        const staffRoleSelect = document.getElementById('staffRole');
+
+        if (userRole === 'staff') {
+            // Staff cannot see the team section at all
+            if (teamNavItem) teamNavItem.style.display = 'none';
+            if (teamContentSection) teamContentSection.style.display = 'none';
+        } else if (userRole === 'manager') {
+            // Managers can only create other Staff members, not other Managers
+            if (staffRoleSelect) {
+                const managerOption = staffRoleSelect.querySelector('option[value="Manager"]');
+                if (managerOption) {
+                    managerOption.remove();
+                }
+            }
+        }
+        // Admin role has no restrictions, so no 'else' block is needed.
     }
 
 
@@ -75,16 +164,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const todaysCompletedEl = document.getElementById('todaysCompleted');
     const analyticsRecordsTableBody = document.getElementById('analyticsRecordsTableBody');
     const recentCancellationsTableBody = document.getElementById('recentCancellationsTableBody');
-    let monthlyProductivityChart = null;
-    let appointmentsPerDayChart = null;
-    let appointmentStatusPieChart = null;
 
 
     // --- Appointments ---
     const appointmentsTableBody = document.getElementById('appointmentsTableBody');
     const conflictsList = document.getElementById('conflictsList');
     const conflictsCard = document.getElementById('conflictsCard');
-    let appointmentStatusChart = null;
 
     // --- Products ---
     let selectedProductIds = [];
@@ -186,6 +271,15 @@ document.addEventListener('DOMContentLoaded', () => {
             if(totalPetsEl) totalPetsEl.textContent = stats.totalPets ?? '0';
             if(appointmentsTodayEl) appointmentsTodayEl.textContent = stats.appointmentsToday ?? '0';
         } catch (e) { /* ignore */ }
+    };
+
+    const fetchTodaysAnalytics = async () => {
+        try {
+            const todayStats = await fetchData('/analytics/today');
+            renderTodaysAnalytics(todayStats);
+        } catch (error) {
+            console.error("Failed to fetch today's analytics stats:", error);
+        }
     };
 
     const fetchAnalyticsData = async () => {
@@ -333,7 +427,7 @@ document.addEventListener('DOMContentLoaded', () => {
             ? `<tr><td colspan="5" class="no-data-message">No recent cancellations found.</td></tr>`
             : cancellations.map(cancel => `
                 <tr>
-                    <td>${cancel.client_name || 'N/A'}</td>
+                    <td>${formatClientName(cancel.client_name) || 'N/A'}</td>
                     <td>${cancel.pet_name || 'N/A'}</td>
                     <td>${(cancel.services || []).join(', ')}</td>
                     <td>${new Date(cancel.appointment_date).toLocaleDateString()}</td>
@@ -352,7 +446,10 @@ document.addEventListener('DOMContentLoaded', () => {
             const average = data.length > 0 ? data.reduce((a, b) => a + b, 0) / data.length : 0;
             const backgroundColors = data.map(val => val >= average ? 'rgba(16, 185, 129, 0.6)' : 'rgba(239, 68, 68, 0.6)');
             const borderColors = data.map(val => val >= average ? 'rgba(16, 185, 129, 1)' : 'rgba(239, 68, 68, 1)');
-    
+            
+            const currentTheme = document.body.classList.contains('dark-mode') ? 'dark' : 'light';
+            const colors = getChartThemeColors(currentTheme);
+
             monthlyProductivityChart = new Chart(ctx, {
                 type: 'bar',
                 data: {
@@ -370,7 +467,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     responsive: true,
                     maintainAspectRatio: false,
                     scales: {
-                        y: { beginAtZero: true, ticks: { stepSize: 1 } }
+                        y: { beginAtZero: true, ticks: { stepSize: 1, color: colors.ticksColor }, grid: { color: colors.gridColor } },
+                        x: { ticks: { color: colors.ticksColor }, grid: { color: 'transparent' } }
                     },
                     plugins: { legend: { display: false } }
                 }
@@ -384,6 +482,10 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const { labels, data } = await fetchData('/analytics/daily-appointments');
             if (appointmentsPerDayChart) appointmentsPerDayChart.destroy();
+
+            const currentTheme = document.body.classList.contains('dark-mode') ? 'dark' : 'light';
+            const colors = getChartThemeColors(currentTheme);
+
             appointmentsPerDayChart = new Chart(ctx, {
                 type: 'line',
                 data: {
@@ -401,7 +503,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     responsive: true,
                     maintainAspectRatio: false,
                     scales: {
-                        y: { beginAtZero: true, ticks: { stepSize: 1 } }
+                        y: { beginAtZero: true, ticks: { stepSize: 1, color: colors.ticksColor }, grid: { color: colors.gridColor } },
+                        x: { ticks: { color: colors.ticksColor }, grid: { color: 'transparent' } }
                     },
                     plugins: { legend: { display: false } }
                 }
@@ -419,12 +522,16 @@ document.addEventListener('DOMContentLoaded', () => {
             const labels = statusData.map(s => s.status);
             const data = statusData.map(s => s.count);
     
-            const colors = {
+            const colorsMap = {
                 Pending: '#f59e0b', Approved: '#10b981', Cancelled: '#ef4444', 
                 Completed: '#3b82f6', 'No Show': '#64748b'
             };
-            const backgroundColors = labels.map(label => colors[label] || '#a8a29e');
+            const backgroundColors = labels.map(label => colorsMap[label] || '#a8a29e');
             
+            const currentTheme = document.body.classList.contains('dark-mode') ? 'dark' : 'light';
+            const colors = getChartThemeColors(currentTheme);
+            const borderColor = currentTheme === 'dark' ? '#1e1e1e' : '#fff';
+
             appointmentStatusPieChart = new Chart(ctx, {
                 type: 'pie',
                 data: {
@@ -433,14 +540,14 @@ document.addEventListener('DOMContentLoaded', () => {
                         label: 'Appointments',
                         data: data,
                         backgroundColor: backgroundColors,
-                        borderColor: '#fff',
+                        borderColor: borderColor,
                         borderWidth: 2,
                     }]
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    plugins: { legend: { position: 'bottom' } }
+                    plugins: { legend: { position: 'bottom', labels: { color: colors.legendColor } } }
                 }
             });
         } catch (e) { console.error("Failed to render status pie chart", e); }
@@ -461,7 +568,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                      <button class="action-btn cancel" data-id="${app.appointment_id}" title="Cancel"><i class="fas fa-times-circle"></i></button>`;
     
                 return `<tr>
-                    <td>${app.client_name || 'N/A'}</td> <td>${app.pet_name || 'N/A'}</td>
+                    <td>${formatClientName(app.client_name) || 'N/A'}</td> <td>${app.pet_name || 'N/A'}</td>
                     <td>${(app.services || []).join(', ')}</td> <td>${formattedDate}</td>
                     <td>${app.appointment_time || 'N/A'}</td> <td><span class="status-badge ${statusClass}">${status || 'N/A'}</span></td>
                     <td><div class="action-buttons">${actionsHtml}</div></td>
@@ -512,7 +619,7 @@ document.addEventListener('DOMContentLoaded', () => {
         conflictsList.innerHTML = conflictArray.map(c => `
             <li class="conflict-item">
                 <div class="conflict-info">
-                    <strong>${c.pet_name}</strong> (${c.client_name})
+                    <strong>${c.pet_name}</strong> (${formatClientName(c.client_name)})
                     <small>${new Date(c.appointment_date).toLocaleDateString()} at ${c.appointment_time}</small>
                 </div>
                 <button class="action-btn reschedule" data-id="${c.appointment_id}" title="Reschedule">
@@ -543,19 +650,25 @@ document.addEventListener('DOMContentLoaded', () => {
         const labels = Object.keys(statusCounts);
         const data = Object.values(statusCounts);
         
-        const colors = {
+        const colorsMap = {
             Pending: '#f59e0b',
             Approved: '#10b981',
             Cancelled: '#ef4444', 
             Completed: '#3b82f6',
             'No Show': '#64748b'
         };
-        const backgroundColors = labels.map(label => colors[label] || '#a8a29e');
+        const backgroundColors = labels.map(label => colorsMap[label] || '#a8a29e');
+        
+        const currentTheme = document.body.classList.contains('dark-mode') ? 'dark' : 'light';
+        const colors = getChartThemeColors(currentTheme);
+        const borderColor = currentTheme === 'dark' ? '#1e1e1e' : '#fff';
     
         if (appointmentStatusChart) {
             appointmentStatusChart.data.labels = labels;
             appointmentStatusChart.data.datasets[0].data = data;
             appointmentStatusChart.data.datasets[0].backgroundColor = backgroundColors;
+            appointmentStatusChart.data.datasets[0].borderColor = borderColor;
+            appointmentStatusChart.options.plugins.legend.labels.color = colors.legendColor;
             appointmentStatusChart.update();
         } else {
             appointmentStatusChart = new Chart(ctx, {
@@ -566,7 +679,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         label: 'Appointments',
                         data: data,
                         backgroundColor: backgroundColors,
-                        borderColor: '#fff',
+                        borderColor: borderColor,
                         borderWidth: 3,
                         hoverOffset: 8,
                     }]
@@ -579,6 +692,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         legend: {
                             position: 'bottom',
                             labels: {
+                                color: colors.legendColor,
                                 usePointStyle: true,
                                 pointStyle: 'circle',
                                 boxWidth: 8,
@@ -587,11 +701,13 @@ document.addEventListener('DOMContentLoaded', () => {
                             }
                         },
                         tooltip: {
-                            backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                            backgroundColor: colors.tooltipBgColor,
                             titleFont: { size: 14, weight: 'bold' },
                             bodyFont: { size: 12 },
                             padding: 10,
                             cornerRadius: 8,
+                            titleColor: colors.tooltipTitleColor,
+                            bodyColor: colors.tooltipBodyColor,
                             callbacks: {
                                 label: function(context) {
                                     const label = context.label || '';
@@ -662,6 +778,18 @@ document.addEventListener('DOMContentLoaded', () => {
             // Since Cloudinary now provides a full, valid URL, we can use it directly.
             const imageUrl = product.image || 'https://placehold.co/300x200/EEE/31343C?text=Image+Not+Found';
 
+            const stock = product.stock;
+            let stockHtml;
+            if (stock === null || stock === undefined) {
+                stockHtml = `<span class="product-stock">Stock: N/A</span>`;
+            } else if (stock <= 0) {
+                stockHtml = `<span class="product-stock stock-out">Out of Stock</span>`;
+            } else if (stock <= 10) {
+                stockHtml = `<span class="product-stock stock-low">Low Stock (${stock})</span>`;
+            } else {
+                stockHtml = `<span class="product-stock stock-in">Stock: ${stock}</span>`;
+            }
+
             return `
             <div class="product-card" data-id="${product.id}">
                 <div class="img-prod-box">
@@ -686,6 +814,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 </div>
                  <div class="product-footer">
                     <span class="product-date">Added: ${formattedDate}</span>
+                    ${stockHtml}
                 </div>
             </div>`;
         }).join('');
@@ -696,19 +825,20 @@ document.addEventListener('DOMContentLoaded', () => {
         staffTableBody.innerHTML = staffList.length === 0
         ? `<tr><td colspan="7">No staff found.</td></tr>`
         : staffList.map(staff => {
-            const isOnline = onlineStaffIds.includes(staff.id);
+            // An inactive staff member in the DB cannot be online.
+            const isOnline = staff.status === 'active' && onlineStaffIds.includes(staff.id);
             return `
-            <tr data-staff-id="${staff.id}">
+            <tr data-staff-id="${staff.id}" data-db-status="${staff.status}">
                 <td>${staff.id}</td>
-                <td>
-                    <div class="staff-name-cell">
-                        <span>${staff.name}</span>
-                        <span title="${isOnline ? 'Online' : 'Offline'}" class="status-indicator ${isOnline ? 'online' : 'offline'}"></span>
-                    </div>
-                </td>
+                <td>${staff.name}</td>
                 <td>${staff.role}</td>
                 <td>${staff.contact}</td>
-                <td><span class="status-badge status-${staff.status.toLowerCase()}">${staff.status}</span></td>
+                <td>
+                    <div class="staff-status-cell">
+                        <span class="status-indicator ${isOnline ? 'online' : 'offline'}" title="${isOnline ? 'Online' : 'Offline'}"></span>
+                        <span class="status-text">${isOnline ? 'Online' : 'Offline'}</span>
+                    </div>
+                </td>
                 <td>${new Date(staff.hired_date).toLocaleDateString()}</td>
                 <td>
                     <button class="action-btn delete" data-id="${staff.id}"><i class="fas fa-trash"></i> Delete</button>
@@ -731,14 +861,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 const services = (log.services || []).map(s => s.toLowerCase());
                 
                 let actionsHtml = '-';
-                if (status === 'approved') {
-                    actionsHtml = `<button class="action-btn confirm-arrival" data-id="${log.appointment_id}" title="Confirm Arrival"><i class="fas fa-check-square"></i> Confirm Arrival</button>`;
+                 if (status === 'approved') {
+                    actionsHtml = `
+                        <button class="action-btn confirm-arrival" data-id="${log.appointment_id}" title="Confirm Arrival"><i class="fas fa-check-square"></i> Confirm</button>
+                        <button class="action-btn no-show" data-id="${log.appointment_id}" title="Mark as No Show"><i class="fas fa-user-slash"></i> No Show</button>
+                    `;
                 } else if (status === 'completed') {
                     if (services.includes('vaccination') || services.includes('check up')) {
                          actionsHtml = `<button class="btn btn-secondary book-follow-up-btn" 
                                             data-user-id="${log.user_id}" 
                                             data-pet-id="${log.pet_id}"
-                                            data-client-name="${log.client_name || 'Client'}"
+                                            data-client-name="${formatClientName(log.client_name) || 'Client'}"
                                             data-pet-name="${log.pet_name || 'Pet'}">
                                             <i class="fas fa-calendar-plus"></i> Book Follow-up
                                         </button>`;
@@ -749,7 +882,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
                 return `
                     <tr data-appointment-id="${log.appointment_id}" data-status="${status}">
-                        <td>${log.client_name || 'N/A'}</td>
+                        <td>${formatClientName(log.client_name) || 'N/A'}</td>
                         <td>${log.pet_name || 'N/A'}</td>
                         <td>${(log.services || []).join(', ')}</td>
                         <td>${formattedDate}</td>
@@ -846,6 +979,18 @@ document.addEventListener('DOMContentLoaded', () => {
         return `${hours}:${minutesStr} ${ampm}`;
     }
 
+    function formatClientName(fullName) {
+        if (!fullName) return '';
+        const parts = fullName.trim().split(/\s+/);
+        if (parts.length <= 2) {
+            return fullName;
+        }
+        const firstName = parts[0];
+        const lastName = parts[parts.length - 1];
+        const middleInitials = parts.slice(1, -1).map(name => `${name.charAt(0)}.`).join(' ');
+        return `${firstName} ${middleInitials} ${lastName}`;
+    }
+
     function openEventModal(start, end) {
         if (!eventForm) return;
         eventForm.reset();
@@ -889,16 +1034,15 @@ document.addEventListener('DOMContentLoaded', () => {
         if (event.classNames.includes('fc-event-holiday')) {
             return;
         }
-
+    
         eventToDeleteId = event.id;
-
+    
         const start = event.start; // These are already Date objects from FullCalendar
         const end = event.end;
         
         if (!start) return;
-
+    
         // Check if the event should be treated as an all-day event for display purposes.
-        // This is true if the event object says so, or if it starts and ends at midnight.
         const isAllDay = event.allDay || (
             start.getHours() === 0 && start.getMinutes() === 0 &&
             end && end.getHours() === 0 && end.getMinutes() === 0 &&
@@ -917,24 +1061,31 @@ document.addEventListener('DOMContentLoaded', () => {
                           : null;
             timeStr = endTime ? `${startTime} - ${endTime}` : startTime;
         }
-
+    
         const pet = event.extendedProps?.pet || "Any";
         const notes = event.extendedProps?.notes || "No additional notes.";
-
+        const eventColor = getEventColor(event.title);
+        const iconClass = getIconForEvent(event.title);
+    
         infoEl.innerHTML = `
-            <h3>Event: "${event.title}"</h3>
+            <div class="event-details-header" style="background-color: ${eventColor};">
+                <h3 class="event-details-title">
+                    <i class="${iconClass}"></i>
+                    ${event.title}
+                </h3>
+            </div>
             <div class="eventDetails-body">
                 <p class="eventDetails-form">
                     <i class="fas fa-clock"></i>
-                    <strong>Time:</strong> ${timeStr}
+                    <span><strong>Time:</strong> ${timeStr}</span>
                 </p>
                 <p class="eventDetails-form">
                     <i class="fas fa-paw"></i>
-                    <strong>Pet Type:</strong> ${pet}
+                    <span><strong>Pet Type:</strong> ${pet}</span>
                 </p>
                 <p class="eventDetails-form">
                     <i class="fas fa-sticky-note"></i>
-                    <strong>Notes:</strong> ${notes}
+                    <span><strong>Notes:</strong> ${notes}</span>
                 </p>
             </div>
             <div class="eventModal-footer">
@@ -945,13 +1096,13 @@ document.addEventListener('DOMContentLoaded', () => {
     
 function getEventColor(title) {
     const colors = {
-        "Free Check Up": "#28a745",
+        "Consultation": "#28a745",
         "Vaccination": "#17a2b8",
-        "Routine Exam": "#ffc107",
-        "Dental Cleaning": "#fd7e14",
+        "Deworming": "#84cc16",
+        "Grooming": "#e83e8c",
+        "Ultrasound": "#8b5cf6",
+        "Confinement": "#4f46e5",
         "Surgery": "#dc3545",
-        "Emergency Treatment": "#6f42c1",
-        "Spay/Neuter": "#e83e8c",
         "Retail Only": "#3b82f6",
         "Clinic Closed": "#64748b"
     };
@@ -960,13 +1111,13 @@ function getEventColor(title) {
 
 function getIconForEvent(title) {
     const iconMap = {
-        "Free Check Up": "fa-stethoscope",
+        "Consultation": "fa-stethoscope",
         "Vaccination": "fa-syringe",
-        "Routine Exam": "fa-notes-medical",
-        "Dental Cleaning": "fa-tooth",
+        "Deworming": "fa-pills",
+        "Grooming": "fa-cut",
+        "Ultrasound": "fa-wave-square",
+        "Confinement": "fa-bed",
         "Surgery": "fa-scalpel",
-        "Emergency Treatment": "fa-heart-pulse",
-        "Spay/Neuter": "fa-paw",
         "Retail Only": "fa-shopping-bag",
         "Clinic Closed": "fa-door-closed"
     };
@@ -1069,7 +1220,7 @@ function formatForDatetimeLocal(date) {
 
         try {
             const users = await fetchData('/users/list');
-            walkInClientSelect.innerHTML = '<option value="">Select a client</option>' + users.map(u => `<option value="${u.user_id}">${u.fullname}</option>`).join('');
+            walkInClientSelect.innerHTML = '<option value="">Select a client</option>' + users.map(u => `<option value="${u.user_id}">${formatClientName(u.fullname)}</option>`).join('');
         } catch (error) {
             walkInClientSelect.innerHTML = '<option value="">Could not load clients</option>';
         }
@@ -1160,6 +1311,19 @@ function formatForDatetimeLocal(date) {
             return; 
         }
 
+        const noShowButton = event.target.closest('.action-btn.no-show');
+        if (noShowButton) {
+            const id = noShowButton.dataset.id;
+            if (confirm('Are you sure you want to mark this appointment as a "No Show"? This cannot be undone.')) {
+                fetchData(`/appointments/${id}/status`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ status: 'No Show' })
+                }).catch(err => alert('An error occurred: ' + err.message));
+            }
+            return;
+        }
+
         const followUpButton = event.target.closest('.book-follow-up-btn');
         if(followUpButton) {
             const { userId, petId, clientName, petName } = followUpButton.dataset;
@@ -1211,7 +1375,7 @@ function formatForDatetimeLocal(date) {
         const appointment = currentAppointments.find(a => a.appointment_id == id);
         if (appointment) {
             document.getElementById('rescheduleAppointmentId').value = id;
-            document.getElementById('rescheduleInfo').textContent = `Rescheduling for ${appointment.pet_name} (${appointment.client_name}).`;
+            document.getElementById('rescheduleInfo').textContent = `Rescheduling for ${appointment.pet_name} (${formatClientName(appointment.client_name)}).`;
             const [year, month, day] = appointment.appointment_date.split('T')[0].split('-');
             document.getElementById('rescheduleDate').value = `${year}-${month}-${day}`;
             document.getElementById('rescheduleTime').value = appointment.appointment_time;
@@ -1368,6 +1532,17 @@ function formatForDatetimeLocal(date) {
     priceInput?.addEventListener('input', updateDiscountDisplay);
     discountInput?.addEventListener('input', updateDiscountDisplay);
     stockInput?.addEventListener('input', updateStockDisplay);
+
+    productSearchInput?.addEventListener('input', filterAndRenderProducts);
+    productSearchBtn?.addEventListener('click', filterAndRenderProducts);
+
+    productFilterBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            productFilterBtns.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            filterAndRenderProducts();
+        });
+    });
 
     
     // --- Staff Delete ---
@@ -1670,7 +1845,12 @@ function formatForDatetimeLocal(date) {
     // Announce online status to server
     socket.emit('staff_online', user.id);
 
-    socket.on('appointment_update', () => { console.log('appointment_update received'); fetchAppointments(); fetchDashboardStats(); });
+    socket.on('appointment_update', () => { 
+        console.log('appointment_update received'); 
+        fetchAppointments(); 
+        fetchDashboardStats();
+        fetchTodaysAnalytics();
+    });
     socket.on('analytics_update', () => { 
         console.log('analytics_update received');
         // Only refetch analytics if the tab is currently active
@@ -1681,18 +1861,27 @@ function formatForDatetimeLocal(date) {
     socket.on('products_update', () => { console.log('products_update received'); loadProducts(); });
     socket.on('staff_update', () => { console.log('staff_update received'); loadStaff(); });
     socket.on('events_update', () => { console.log('events_update received'); loadCalendarEvents(); });
+    
     socket.on('online_staff_update', (onlineIds) => {
         onlineStaffIds = onlineIds;
-        // Find all staff rows and update their status indicator without a full reload
-        const staffRows = document.querySelectorAll('#staffTable tbody tr');
-        staffRows.forEach(row => {
-            const staffId = row.dataset.staffId;
+        // Find all staff rows and update their status indicator and text without a full reload
+        document.querySelectorAll('#staffTable tbody tr[data-staff-id]').forEach(row => {
+            const staffId = parseInt(row.dataset.staffId, 10);
+            const dbStatus = row.dataset.dbStatus;
+            
+            // An inactive staff member in the DB cannot be online
+            const isOnline = dbStatus === 'active' && onlineStaffIds.includes(staffId);
+            
             const indicator = row.querySelector('.status-indicator');
-            if (staffId && indicator) {
-                const isOnline = onlineStaffIds.includes(parseInt(staffId, 10));
-                indicator.classList.toggle('online', isOnline);
-                indicator.classList.toggle('offline', !isOnline);
+            const statusText = row.querySelector('.status-text');
+
+            if (indicator) {
+                // Use className to overwrite previous state completely
+                indicator.className = `status-indicator ${isOnline ? 'online' : 'offline'}`;
                 indicator.title = isOnline ? 'Online' : 'Offline';
+            }
+            if (statusText) {
+                statusText.textContent = isOnline ? 'Online' : 'Offline';
             }
         });
     });

@@ -56,6 +56,15 @@
             <div class="header">
                 <h1 class="page-title" id="contentTitle">Dashboard Overview</h1>
                 <div class="user-info">
+                     <div class="theme-switch-wrapper">
+                        <label class="theme-switch" for="theme-toggle">
+                            <input type="checkbox" id="theme-toggle" />
+                            <div class="slider round">
+                                <div class="icon-wrapper sun"><i class="fas fa-sun"></i></div>
+                                <div class="icon-wrapper moon"><i class="fas fa-moon"></i></div>
+                            </div>
+                        </label>
+                    </div>
                     <div class="user-avatar" id="userAvatar">A</div>
                     <span id="userName">Admin</span>
                     <div class="user-menu" id="userMenu" style="display:none">
@@ -80,8 +89,8 @@
                     </div>
                 </div>
             </div>
-            <div id="eventModal" class="modal" style="display:none;"><div class="modal-content"><h2 id="modalTitle">Add New Event</h2><form id="calendarEventForm"><div class="form-group"><label for="calendarEventTitle" style="color: #E9590F; font-weight: 400;">Service Type:</label><select id="calendarEventTitle" name="title" required><option value="">Select a service</option><option value="Free Check Up">Free Check Up</option><option value="Vaccination">Vaccination</option><option value="Routine Exam">Routine Exam</option><option value="Dental Cleaning">Dental Cleaning</option><option value="Surgery">Surgery</option><option value="Emergency Treatment">Emergency Treatment</option><option value="Spay/Neuter">Spay/Neuter</option><option value="Retail Only">Retail Only</option><option value="Clinic Closed">Clinic Closed</option></select></div><div class="form-group"><label for="calendarEventStart">Start Time:</label><input type="datetime-local" id="calendarEventStart" name="start" required></div><div class="form-group"><label for="calendarEventEnd">End Time:</label><input type="datetime-local" id="calendarEventEnd" name="end" required></div><div class="form-group"><label for="calendarEventPet">Pet Type:</label><input type="text" id="calendarEventPet" name="pet" placeholder="e.g., Dog - Golden Retriever"></div><div class="form-group"><label for="calendarEventNotes">Notes:</label><textarea id="calendarEventNotes" name="notes" rows="3" placeholder="Additional details..."></textarea></div><input type="hidden" id="calendarEventCreatedBy" name="created_by" value=""><div class="modal-buttons"><button type="button" class="btn btn-secondary" id="cancelEventModalBtn">Cancel</button><button type="submit" class="btn btn-primary">Save Event</button></div></form></div></div>
-            <div id="eventDetails" class="modal" style="display:none;"><div class="modal-content"><div id="eventInfo"></div><div class="modal-buttons" style="margin-top:20px;"><button class="modal-btn confirm-danger" id="deleteEventBtn">Delete Event</button><button class="modal-btn" id="closeEventDetailsBtn">Close</button></div></div></div>
+            <div id="eventModal" class="modal" style="display:none;"><div class="modal-content"><h2 id="modalTitle">Add New Event</h2><form id="calendarEventForm"><div class="form-group"><label for="calendarEventTitle" style="color: #E9590F; font-weight: 400;">Service Type:</label><select id="calendarEventTitle" name="title" required><option value="">Select a service</option><option value="Consultation">Consultation</option><option value="Vaccination">Vaccination</option><option value="Deworming">Deworming</option><option value="Grooming">Grooming</option><option value="Ultrasound">Ultrasound</option><option value="Confinement">Confinement</option><option value="Surgery">Surgery</option><option value="Retail Only">Retail Only</option><option value="Clinic Closed">Clinic Closed</option></select></div><div class="form-group"><label for="calendarEventStart">Start Time:</label><input type="datetime-local" id="calendarEventStart" name="start" required></div><div class="form-group"><label for="calendarEventEnd">End Time:</label><input type="datetime-local" id="calendarEventEnd" name="end" required></div><div class="form-group"><label for="calendarEventPet">Pet Type:</label><input type="text" id="calendarEventPet" name="pet" placeholder="e.g., Dog - Golden Retriever"></div><div class="form-group"><label for="calendarEventNotes">Notes:</label><textarea id="calendarEventNotes" name="notes" rows="3" placeholder="Additional details..."></textarea></div><input type="hidden" id="calendarEventCreatedBy" name="created_by" value=""><div class="modal-buttons"><button type="button" class="btn btn-secondary" id="cancelEventModalBtn">Cancel</button><button type="submit" class="btn btn-primary">Save Event</button></div></form></div></div>
+            <div id="eventDetails" class="modal" style="display:none;"><div class="modal-content"><div id="eventInfo"></div><div class="modal-buttons"><button class="modal-btn confirm-danger" id="deleteEventBtn">Delete Event</button><button class="modal-btn" id="closeEventDetailsBtn">Close</button></div></div></div>
              <div id="confirmDeleteEventModal" class="modal">
                  <div class="modal-content modal-confirm">
                     <div class="modal-icon-wrapper danger">
@@ -134,6 +143,28 @@
                         <button id="cancelDeleteAnalyticsBtn" class="modal-btn cancel">Cancel</button>
                         <button id="confirmDeleteAnalyticsBtn" class="modal-btn confirm-danger">Delete</button>
                     </div>
+                </div>
+            </div>
+
+            <!-- Add/Edit Holiday Modal -->
+            <div id="holidayModal" class="modal" style="display:none;">
+                <div class="modal-content modal-form-container">
+                    <h2 class="modal-title" id="holidayModalTitle">Add Holiday</h2>
+                    <form id="holidayForm">
+                        <input type="hidden" id="holidayId">
+                        <div class="form-group">
+                            <label for="holidayTitle">Holiday Name</label>
+                            <input type="text" id="holidayTitle" required class="form-control" placeholder="e.g., New Year's Day">
+                        </div>
+                        <div class="form-group">
+                            <label for="holidayDate">Date</label>
+                            <input type="date" id="holidayDate" required class="form-control">
+                        </div>
+                        <div class="modal-buttons" style="margin-top:20px;">
+                            <button type="button" class="modal-btn cancel" id="cancelHolidayBtn">Cancel</button>
+                            <button type="submit" class="modal-btn btn-primary" id="saveHolidayBtn">Save Holiday</button>
+                        </div>
+                    </form>
                 </div>
             </div>
             
@@ -395,7 +426,10 @@
                         <div id="calendar"></div>
                     </div>
                     <div class="calendar-sidebar card">
-                        <h3 class="sidebar-title"><i class="fas fa-calendar-alt"></i> Holidays This Month</h3>
+                        <div class="sidebar-header">
+                           <h3 class="sidebar-title"><i class="fas fa-calendar-alt"></i> Manage Holidays</h3>
+                           <button class="btn btn-primary btn-sm" id="addHolidayBtn"><i class="fas fa-plus"></i> Add</button>
+                        </div>
                         <ul id="holidaysList" class="holidays-list">
                             <li class="no-data-message">Loading holidays...</li>
                         </ul>
@@ -407,7 +441,7 @@
             <div class="content-section" id="logs">
                  <div class="logs-header">
                     <h2 class="section-title">Visit Logs</h2>
-                    <button class="btn btn-primary" id="logWalkInBtn"><i class="fas fa-plus"></i> + Walk-in Visit</button>
+                    <button class="btn btn-primary" id="logWalkInBtn">Walk-in Visit</button>
                 </div>
                 <div class="card">
                     <div class="table-wrapper">
